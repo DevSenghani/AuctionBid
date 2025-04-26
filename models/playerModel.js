@@ -1,0 +1,149 @@
+const db = require('../utils/database');
+
+// Get all players
+exports.getAllPlayers = async () => {
+  try {
+    console.log('Fetching all players from database...');
+    const result = await db.query('SELECT * FROM players ORDER BY name');
+    console.log(`Retrieved ${result.rows.length} players`);
+    return result.rows;
+  } catch (error) {
+    console.error('Error fetching all players:', error);
+    return []; // Return empty array instead of throwing
+  }
+};
+
+// Get player by ID
+exports.getPlayerById = async (id) => {
+  try {
+    console.log(`Fetching player with ID ${id}...`);
+    const result = await db.query('SELECT * FROM players WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      console.log(`No player found with ID ${id}`);
+      return null;
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error fetching player with ID ${id}:`, error);
+    return null; // Return null instead of throwing
+  }
+};
+
+// Get player by ID with team information joined
+exports.getPlayerWithTeam = async (id) => {
+  try {
+    console.log(`Fetching player with ID ${id} including team information...`);
+    const result = await db.query(
+      `SELECT p.*, t.name as team_name, t.owner as team_owner 
+       FROM players p 
+       LEFT JOIN teams t ON p.team_id = t.id 
+       WHERE p.id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      console.log(`No player found with ID ${id}`);
+      return null;
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error fetching player with team for ID ${id}:`, error);
+    return null; // Return null instead of throwing
+  }
+};
+
+// Get players without a team (available for auction)
+exports.getAvailablePlayers = async () => {
+  try {
+    console.log('Fetching available players (without team)...');
+    const result = await db.query(
+      'SELECT * FROM players WHERE team_id IS NULL ORDER BY name'
+    );
+    console.log(`Found ${result.rows.length} available players`);
+    return result.rows;
+  } catch (error) {
+    console.error('Error fetching available players:', error);
+    return []; // Return empty array instead of throwing
+  }
+};
+
+// Get players belonging to a team
+exports.getPlayersByTeam = async (teamId) => {
+  try {
+    console.log(`Fetching players for team ID ${teamId}...`);
+    const result = await db.query(
+      'SELECT * FROM players WHERE team_id = $1 ORDER BY name',
+      [teamId]
+    );
+    console.log(`Found ${result.rows.length} players for team ID ${teamId}`);
+    return result.rows;
+  } catch (error) {
+    console.error(`Error fetching players for team ID ${teamId}:`, error);
+    return []; // Return empty array instead of throwing
+  }
+};
+
+// Create a new player
+exports.createPlayer = async (playerData) => {
+  const { name, base_price, role, team_id } = playerData;
+  try {
+    const result = await db.query(
+      'INSERT INTO players (name, base_price, role, team_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, base_price, role, team_id]
+    );
+    return result.rows[0];
+  } catch (error) {
+    console.error('Error creating player:', error);
+    throw error; // Rethrow for handling in controller
+  }
+};
+
+// Update a player
+exports.updatePlayer = async (id, playerData) => {
+  const { name, base_price, role, team_id } = playerData;
+  try {
+    const result = await db.query(
+      'UPDATE players SET name = $1, base_price = $2, role = $3, team_id = $4 WHERE id = $5 RETURNING *',
+      [name, base_price, role, team_id, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Player not found');
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error updating player with ID ${id}:`, error);
+    throw error; // Rethrow for handling in controller
+  }
+};
+
+// Update player's team (for auction)
+exports.updatePlayerTeam = async (playerId, teamId) => {
+  try {
+    console.log(`Updating player ${playerId} to belong to team ${teamId}...`);
+    const result = await db.query(
+      'UPDATE players SET team_id = $1 WHERE id = $2 RETURNING *',
+      [teamId, playerId]
+    );
+    if (result.rows.length === 0) {
+      console.error(`No player found with ID ${playerId} to update team`);
+      throw new Error('Player not found');
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error updating team for player ID ${playerId}:`, error);
+    throw error; // Rethrow for handling in controller
+  }
+};
+
+// Delete a player
+exports.deletePlayer = async (id) => {
+  try {
+    const result = await db.query('DELETE FROM players WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      throw new Error('Player not found');
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error deleting player with ID ${id}:`, error);
+    throw error; // Rethrow for handling in controller
+  }
+};

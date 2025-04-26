@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .team-card {
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .team-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    .team-card .card-header {
+      background: linear-gradient(135deg, #0d6efd, #0a58ca);
+      padding: 15px;
+    }
+    .team-info-badge {
+      font-size: 0.85rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 20px;
+      margin-right: 8px;
+    }
+    .view-team-btn {
+      transition: all 0.2s ease;
+      border-radius: 20px;
+    }
+    .view-team-btn:hover {
+      transform: scale(1.05);
+    }
+    .player-row {
+      transition: background-color 0.2s ease;
+    }
+    .player-row:hover {
+      background-color: #f8f9fa;
+    }
+    .modal-header {
+      background: linear-gradient(135deg, #0d6efd, #0a58ca);
+      color: white;
+    }
+    .team-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .team-stat-item {
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      padding: 10px 15px;
+      margin: 5px;
+      flex-grow: 1;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .team-stat-item .stat-value {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #0d6efd;
+    }
+    .empty-state {
+      padding: 30px;
+      text-align: center;
+      color: #6c757d;
+    }
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/home">
+        <i class="fas fa-trophy me-2"></i>Cricket Auction
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/auction">
+              Auction
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" href="/teams">
+              Teams
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/results">
+              Results
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/admin">
+              Admin
+            </a>
+          </li>
+        </ul>
+        <ul class="navbar-nav">
+          <% if (typeof team !== 'undefined') { %>
+            <li class="nav-item">
+              <a class="nav-link" href="/team/dashboard">
+                <i class="fas fa-user me-1"></i>Welcome, <%= teams.name %>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/team/logout">
+                <i class="fas fa-sign-out-alt me-1"></i>Logout
+              </a>
+            </li>
+          <% } else { %>
+            <li class="nav-item">
+              <a class="btn btn-primary btn-sm" href="/team/login">
+                Team Login
+              </a>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1><i class="fas fa-users me-2"></i>Teams</h1>
+      <div class="input-group" style="max-width: 300px;">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" class="form-control" id="team-search" placeholder="Search teams...">
+      </div>
+    </div>
+    
+    <% if (typeof usingMockDb !== 'undefined' && usingMockDb) { %>
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i><strong>Note:</strong> Database connection could not be established. Using mock data for demonstration.
+      </div>
+    <% } %>
+    
+    <div class="row row-cols-1 row-cols-md-3 g-4" id="teams-container">
+      <% if (teams && teams.length > 0) { %>
+        <% teams.forEach(team => { %>
+          <div class="col team-item" data-team-name="<%= team.name.toLowerCase() %>">
+            <div class="card h-100 team-card">
+              <div class="card-header text-white">
+                <h5 class="mb-0"><%= team.name %></h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <p class="mb-2"><i class="fas fa-user me-2"></i><strong>Owner:</strong> <%= team.owner || 'Not specified' %></p>
+                  <p class="mb-2"><i class="fas fa-coins me-2"></i><strong>Budget:</strong> ₹<%= typeof team.budget !== 'undefined' ? team.budget.toLocaleString() : '0' %></p>
+                </div>
+                <div class="d-flex">
+                  <button class="btn btn-primary view-team-btn w-100" data-team-id="<%= team.id %>">
+                    <i class="fas fa-eye me-1"></i> View Players
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <div class="col-12">
+          <div class="empty-state">
+            <i class="fas fa-users-slash"></i>
+            <h4>No Teams Available</h4>
+            <p>Visit the Admin section to create teams for the auction.</p>
+            <a href="/admin" class="btn btn-primary">
+              <i class="fas fa-cog me-1"></i> Go to Admin
+            </a>
+          </div>
+        </div>
+      <% } %>
+    </div>
+    
+    <!-- Team Players Modal -->
+    <div class="modal fade" id="teamPlayersModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="teamPlayersModalTitle">
+              <i class="fas fa-users me-2"></i><span id="modal-team-name"></span>
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="team-stats mb-4">
+              <div class="team-stat-item">
+                <div class="stat-label">Budget</div>
+                <div class="stat-value">₹<span id="modal-team-budget">0</span></div>
+              </div>
+              <div class="team-stat-item">
+                <div class="stat-label">Players</div>
+                <div class="stat-value"><span id="modal-player-count">0</span></div>
+              </div>
+              <div class="team-stat-item">
+                <div class="stat-label">Spent</div>
+                <div class="stat-value">₹<span id="modal-team-spent">0</span></div>
+              </div>
+            </div>
+            
+            <div class="input-group mb-3">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" id="player-search" placeholder="Search players...">
+            </div>
+            
+            <div class="team-players">
+              <h5><i class="fas fa-user me-2"></i>Players:</h5>
+              <div class="table-responsive">
+                <table class="table table-hover">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Name</th>
+                      <th>Role</th>
+                      <th>Price</th>
+                    </tr>
+                  </thead>
+                  <tbody id="team-players-list">
+                    <!-- Player list will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize modal
+      const teamPlayersModal = new bootstrap.Modal(document.getElementById('teamPlayersModal'));
+      
+      // Team search functionality
+      const teamSearch = document.getElementById('team-search');
+      teamSearch.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const teamItems = document.querySelectorAll('.team-item');
+        
+        teamItems.forEach(item => {
+          const teamName = item.getAttribute('data-team-name');
+          if (teamName.includes(searchTerm)) {
+            item.style.display = '';
+          } else {
+            item.style.display = 'none';
+          }
+        });
+      });
+      
+      // Player search functionality
+      const playerSearch = document.getElementById('player-search');
+      playerSearch.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const playerRows = document.querySelectorAll('#team-players-list tr.player-row');
+        
+        playerRows.forEach(row => {
+          const playerName = row.getAttribute('data-player-name');
+          const playerRole = row.getAttribute('data-player-role');
+          
+          if (playerName.includes(searchTerm) || playerRole.includes(searchTerm)) {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        });
+      });
+      
+      // View team players button click
+      document.querySelectorAll('.view-team-btn').forEach(button => {
+        button.addEventListener('click', function() {
+          const teamId = this.getAttribute('data-team-id');
+          
+          // Reset search field
+          document.getElementById('player-search').value = '';
+          
+          // Show loading state
+          document.getElementById('modal-team-name').textContent = 'Loading...';
+          document.getElementById('modal-team-budget').textContent = '0';
+          document.getElementById('modal-player-count').textContent = '0';
+          document.getElementById('modal-team-spent').textContent = '0';
+          document.getElementById('team-players-list').innerHTML = `
+            <tr>
+              <td colspan="3" class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+              </td>
+            </tr>
+          `;
+          
+          // Show modal while loading
+          teamPlayersModal.show();
+          
+          // Fetch team details
+          fetch(`/teams/${teamId}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              // Update modal content
+              document.getElementById('modal-team-name').textContent = data.team.name || 'Unknown Team';
+              
+              // Safely format the budget
+              const budget = data.team && data.team.budget !== undefined 
+                ? data.team.budget.toLocaleString() 
+                : '0';
+              document.getElementById('modal-team-budget').textContent = budget;
+              
+              // Calculate total spent and update player count
+              let totalSpent = 0;
+              if (data.players && data.players.length > 0) {
+                data.players.forEach(player => {
+                  if (player.base_price) {
+                    totalSpent += player.base_price;
+                  }
+                });
+              }
+              
+              document.getElementById('modal-player-count').textContent = data.players ? data.players.length : 0;
+              document.getElementById('modal-team-spent').textContent = totalSpent.toLocaleString();
+              
+              const playersList = document.getElementById('team-players-list');
+              playersList.innerHTML = '';
+              
+              if (data.players && data.players.length > 0) {
+                data.players.forEach(player => {
+                  const row = document.createElement('tr');
+                  row.className = 'player-row';
+                  row.setAttribute('data-player-name', (player.name || '').toLowerCase());
+                  row.setAttribute('data-player-role', (player.role || '').toLowerCase());
+                  
+                  const nameCell = document.createElement('td');
+                  nameCell.innerHTML = `<strong>${player.name || 'Unknown Player'}</strong>`;
+                  
+                  const roleCell = document.createElement('td');
+                  const roleBadgeClass = getRoleBadgeClass(player.role);
+                  roleCell.innerHTML = `<span class="badge ${roleBadgeClass}">${player.role || 'Unknown'}</span>`;
+                  
+                  const priceCell = document.createElement('td');
+                  // Safely format the base price
+                  const price = player.base_price !== undefined 
+                    ? player.base_price.toLocaleString() 
+                    : '0';
+                  priceCell.innerHTML = `<span class="fw-bold">₹${price}</span>`;
+                  
+                  row.appendChild(nameCell);
+                  row.appendChild(roleCell);
+                  row.appendChild(priceCell);
+                  
+                  playersList.appendChild(row);
+                });
+              } else {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 3;
+                cell.innerHTML = `
+                  <div class="empty-state">
+                    <i class="fas fa-user-slash"></i>
+                    <p>No players in this team yet.</p>
+                  </div>
+                `;
+                cell.className = 'text-center';
+                row.appendChild(cell);
+                playersList.appendChild(row);
+              }
+            })
+            .catch(error => {
+              console.error('Error fetching team details:', error);
+              document.getElementById('team-players-list').innerHTML = `
+                <tr>
+                  <td colspan="3" class="text-center text-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Error loading team details. Please try again.
+                  </td>
+                </tr>
+              `;
+            });
+        });
+      });
+      
+      // Helper function to get badge class based on player role
+      function getRoleBadgeClass(role) {
+        if (!role) return 'bg-secondary';
+        
+        role = role.toLowerCase();
+        if (role.includes('batsman') || role.includes('batter')) {
+          return 'bg-danger';
+        } else if (role.includes('bowler')) {
+          return 'bg-success';
+        } else if (role.includes('all-rounder') || role.includes('all rounder')) {
+          return 'bg-primary';
+        } else if (role.includes('wicket') || role.includes('keeper')) {
+          return 'bg-info';
+        } else {
+          return 'bg-secondary';
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .player-item.active {
+      background-color: #e9f5ff;
+      border-left: 4px solid #0d6efd;
+    }
+    .bid-card {
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .bid-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    .player-details-card {
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .player-header {
+      background: linear-gradient(135deg, #0d6efd, #0a58ca);
+      color: white;
+      padding: 15px;
+    }
+    .bid-history-item {
+      border-left: 3px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .bid-history-item:hover {
+      border-left-color: #0d6efd;
+      background-color: #f8f9fa;
+    }
+    .auction-controls {
+      position: sticky;
+      top: 20px;
+    }
+    .badge-role {
+      font-size: 0.8rem;
+      padding: 5px 10px;
+      border-radius: 20px;
+    }
+    .empty-state {
+      padding: 30px;
+      text-align: center;
+      color: #6c757d;
+    }
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 15px;
+    }
+    .timer-container {
+      margin-top: 10px;
+      text-align: center;
+    }
+    .timer {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #dc3545;
+    }
+    .timer.warning {
+      color: #dc3545;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/home">
+        <i class="fas fa-trophy me-2"></i>Cricket Auction
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item">
+            <a class="nav-link active" href="/auction">
+              Auction
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/teams">
+              Teams
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/results">
+              Results
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/admin">
+              Admin
+            </a>
+          </li>
+        </ul>
+        <ul class="navbar-nav">
+          <% if (typeof team !== 'undefined') { %>
+            <li class="nav-item">
+              <a class="nav-link" href="/team/dashboard">
+                <i class="fas fa-user me-1"></i>Welcome, <%= team.name %>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/team/logout">
+                <i class="fas fa-sign-out-alt me-1"></i>Logout
+              </a>
+            </li>
+          <% } else { %>
+            <li class="nav-item">
+              <a class="btn btn-primary btn-sm" href="/team/login">
+                Team Login
+              </a>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1>Cricket Auction</h1>
+      <div class="auction-status">
+        <span id="auction-status-badge" class="badge bg-secondary">Auction Not Running</span>
+      </div>
+    </div>
+    
+    <% if (typeof usingMockDb !== 'undefined' && usingMockDb) { %>
+      <div class="alert alert-warning">
+        <strong>Note:</strong> Database connection could not be established. Using mock data for demonstration.
+      </div>
+    <% } %>
+    
+    <div id="waiting-message" class="alert alert-info text-center">
+      <div class="mb-3">
+        <i class="fas fa-circle-notch fa-spin fa-2x mb-3"></i>
+        <h4>Waiting for auction to start...</h4>
+        <p>The administrator will start the auction soon. Please wait.</p>
+      </div>
+    </div>
+    
+    <div id="auction-container" class="row" style="display: none;">
+      <div class="col-md-8">
+        <div class="card mb-4 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Current Player on Auction</h5>
+          </div>
+          <div class="card-body" id="current-player">
+            <div class="row">
+              <div class="col-md-12">
+                <div id="player-details">
+                  <div class="card player-details-card">
+                    <div class="player-header">
+                      <h3 id="player-name" class="card-title mb-0">Loading player...</h3>
+                      <span id="player-role-badge" class="badge badge-role bg-info mt-2"></span>
+                    </div>
+                    <div class="card-body">
+                      <div class="row mb-3">
+                        <div class="col-6">
+                          <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                              <small class="text-muted">Base Price</small>
+                              <h5 id="player-base-price" class="mb-0">-</h5>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-6">
+                          <div class="card bg-light">
+                            <div class="card-body p-2 text-center">
+                              <small class="text-muted">Role</small>
+                              <h5 id="player-role" class="mb-0">-</h5>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="timer-container">
+                        <div class="alert alert-info">
+                          <i class="fas fa-clock me-2"></i>Time remaining:
+                          <span id="bid-timer" class="timer">-</span> seconds
+                        </div>
+                        <div class="progress">
+                          <div id="time-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 100%"></div>
+                        </div>
+                      </div>
+                      <hr>
+                      <div class="current-bid-info p-3 bg-light rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <div>
+                            <h5 class="mb-1">Current Bid</h5>
+                            <h3 id="current-bid" class="text-primary mb-0">No bids yet</h3>
+                          </div>
+                          <div class="text-end">
+                            <h5 class="mb-1">Current Bidder</h5>
+                            <h6 id="current-bidder" class="mb-0">None</h6>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-4">
+        <div class="auction-controls">
+          <div class="card bid-card mb-3 shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Place Bid</h5>
+            </div>
+            <div class="card-body">
+              <% if (typeof team !== 'undefined') { %>
+                <form id="bid-form">
+                  <input type="hidden" id="team-id" value="<%= team.id %>">
+                  <input type="hidden" id="current-player-id" value="">
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <h5 class="mb-0"><%= team.name %></h5>
+                      <div class="team-budget">
+                        <span class="badge bg-primary">
+                          <i class="fas fa-wallet me-1"></i>Budget:₹<%= typeof team.budget !== 'undefined' ? team.budget.toLocaleString() : '0' %>
+                        </span>
+                        <span class="badge bg-secondary ms-2">
+                          <i class="fas fa-users me-1"></i>Players: <%= team.player_count || 0 %>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="bid-amount" class="form-label">Bid Amount</label>
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="fas fa-rupee-sign"></i></span>
+                      <input type="number" class="form-control" id="bid-amount" required>
+                    </div>
+                    <div class="d-flex justify-content-end mt-2">
+                      <small class="text-muted">Min Bid: <span id="min-bid" class="fw-bold">N/A</span></small>
+                    </div>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success" id="place-bid-btn" disabled>
+                      <i class="fas fa-gavel me-2"></i>Place Bid
+                    </button>
+                  </div>
+                </form>
+              <% } else { %>
+                <div class="alert alert-warning">
+                  <i class="fas fa-exclamation-triangle me-2"></i>
+                  You need to <a href="/team/login" class="alert-link">login as a team</a> to place bids.
+                </div>
+              <% } %>
+            </div>
+          </div>
+          
+          <div class="card bid-card shadow-sm">
+            <div class="card-header bg-info text-white">
+              <h5 class="mb-0"><i class="fas fa-history me-2"></i>Bid History</h5>
+            </div>
+            <div class="card-body p-0">
+              <ul class="list-group list-group-flush" id="bid-history" style="max-height: 250px; overflow-y: auto;">
+                <li class="list-group-item text-center">No bids placed yet</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // DOM Elements
+      const auctionStatusBadge = document.getElementById('auction-status-badge');
+      const waitingMessage = document.getElementById('waiting-message');
+      const auctionContainer = document.getElementById('auction-container');
+      const playerName = document.getElementById('player-name');
+      const playerRole = document.getElementById('player-role');
+      const playerRoleBadge = document.getElementById('player-role-badge');
+      const playerBasePrice = document.getElementById('player-base-price');
+      const currentBid = document.getElementById('current-bid');
+      const currentBidder = document.getElementById('current-bidder');
+      const bidHistory = document.getElementById('bid-history');
+      const bidAmount = document.getElementById('bid-amount');
+      const minBid = document.getElementById('min-bid');
+      const placeBidBtn = document.getElementById('place-bid-btn');
+      const bidForm = document.getElementById('bid-form');
+      const bidTimer = document.getElementById('bid-timer');
+      const timeProgress = document.getElementById('time-progress');
+      const teamId = document.getElementById('team-id');
+      const currentPlayerId = document.getElementById('current-player-id');
+      
+      let timerInterval = null;
+      let currentPlayerData = null;
+      let socket;
+      
+      // Initialize Socket.IO
+      function initializeSocket() {
+        // Set socket connection
+        socket = io('', {
+          auth: {
+            teamId: teamId ? teamId.value : null,
+            teamName: '<%= team ? team.name : null %>'
+          }
+        });
+        
+        // Socket connection event
+        socket.on('connect', () => {
+          console.log('Socket connected: ' + socket.id);
+        });
+        
+        // Socket disconnection event
+        socket.on('disconnect', () => {
+          console.log('Socket disconnected');
+        });
+        
+        // Listen for auction status updates
+        socket.on('auction-status', (data) => {
+          handleAuctionStatus(data);
+        });
+        
+        // Listen for new bids
+        socket.on('new-bid', (data) => {
+          if (currentPlayerId && currentPlayerId.value === data.player_id) {
+            updateBidInfo(data);
+          }
+        });
+        
+        // Listen for player sold
+        socket.on('player-sold', (data) => {
+          showPlayerSoldMessage(data);
+        });
+        
+        // Listen for player unsold
+        socket.on('player-unsold', (data) => {
+          showPlayerUnsoldMessage(data);
+        });
+        
+        // Listen for waiting countdown
+        socket.on('waiting-countdown', (data) => {
+          showWaitingCountdown(data.seconds);
+        });
+        
+        // Listen for next player
+        socket.on('next-player', (player) => {
+          if (player) {
+            loadPlayerDetails(player.id);
+          }
+        });
+      }
+      
+      // Format currency function
+      const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: 'INR',
+          maximumFractionDigits: 0
+        }).format(amount);
+      };
+      
+      // Show waiting countdown
+      function showWaitingCountdown(seconds) {
+        if (waitingMessage) {
+          const countdownElem = waitingMessage.querySelector('.countdown-number') || 
+                               document.createElement('div');
+          
+          if (!countdownElem.classList.contains('countdown-number')) {
+            countdownElem.className = 'countdown-number my-3 alert alert-warning';
+            waitingMessage.querySelector('.mb-3').appendChild(countdownElem);
+          }
+          
+          countdownElem.innerHTML = `
+            <strong>Next player in: ${seconds} seconds</strong><br>
+            <small>The admin is selecting the next player...</small>
+          `;
+          
+          // Show waiting message
+          waitingMessage.style.display = 'block';
+          auctionContainer.style.display = 'none';
+        }
+      }
+      
+      // Show player sold message
+      function showPlayerSoldMessage(data) {
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3';
+        toastContainer.style.zIndex = '5';
+        toastContainer.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-success text-white">
+              <strong class="me-auto">Player Sold</strong>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body text-center">
+              <h5>${data.player.name}</h5>
+              <p>Sold to <strong>${data.team.name}</strong> for <strong>${formatCurrency(data.amount)}</strong></p>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(toastContainer);
+        
+        // Remove toast after 5 seconds
+        setTimeout(() => {
+          toastContainer.remove();
+        }, 5000);
+      }
+      
+      // Show player unsold message
+      function showPlayerUnsoldMessage(data) {
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3';
+        toastContainer.style.zIndex = '5';
+        toastContainer.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-secondary text-white">
+              <strong class="me-auto">Player Unsold</strong>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body text-center">
+              <h5>${data.player.name}</h5>
+              <p>No bids received - marked as unsold</p>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(toastContainer);
+        
+        // Remove toast after 5 seconds
+        setTimeout(() => {
+          toastContainer.remove();
+        }, 5000);
+      }
+      
+      // Update bid info when new bid comes in
+      function updateBidInfo(bid) {
+        // Update highest bid
+        currentBid.textContent = formatCurrency(bid.amount);
+        currentBidder.textContent = bid.team_name;
+        currentBid.classList.add('text-success');
+        
+        // Set minimum bid amount to highest bid + increment
+        const nextBidAmount = parseInt(bid.amount) + 10000;
+        if (bidAmount) {
+          bidAmount.min = nextBidAmount;
+          bidAmount.value = nextBidAmount;
+          minBid.textContent = formatCurrency(nextBidAmount);
+        }
+        
+        // Update bid history
+        loadBidHistory(currentPlayerId.value);
+        
+        // Show a toast notification
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '5';
+        toastContainer.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-primary text-white">
+              <strong class="me-auto">New Bid</strong>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+              <strong>${bid.team_name}</strong> placed a bid of ${formatCurrency(bid.amount)}
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(toastContainer);
+        
+        // Remove toast after 3 seconds
+        setTimeout(() => {
+          toastContainer.remove();
+        }, 3000);
+      }
+      
+      // Timer function
+      function updateTimer(timeRemaining) {
+        // Clear any existing timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+        }
+        
+        if (!timeRemaining || timeRemaining <= 0) {
+          bidTimer.textContent = "Waiting...";
+          timeProgress.style.width = '100%';
+          timeProgress.className = 'progress-bar progress-bar-striped progress-bar-animated bg-secondary';
+          return;
+        }
+        
+        // Update timer immediately
+        bidTimer.textContent = timeRemaining;
+        const progressPercent = (timeRemaining / 60) * 100;
+        timeProgress.style.width = `${progressPercent}%`;
+        
+        // Update progress bar color
+        if (progressPercent > 60) {
+          timeProgress.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+        } else if (progressPercent > 30) {
+          timeProgress.className = 'progress-bar progress-bar-striped progress-bar-animated bg-warning';
+        } else {
+          timeProgress.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
+        }
+        
+        // Add warning class when time is running out
+        if (timeRemaining <= 10) {
+          bidTimer.classList.add('warning');
+        } else {
+          bidTimer.classList.remove('warning');
+        }
+      }
+      
+      // Handle auction status updates
+      function handleAuctionStatus(data) {
+        // Update auction status badge
+        if (data.status === 'running') {
+          auctionStatusBadge.textContent = 'Auction Running';
+          auctionStatusBadge.className = 'badge bg-success';
+          
+          // Show auction container and hide waiting message
+          waitingMessage.style.display = 'none';
+          auctionContainer.style.display = 'flex';
+          
+          // Update timer
+          updateTimer(data.timeRemaining);
+          
+          // If there's a current player and it's different from what we have
+          if (data.currentPlayer && (!currentPlayerData || data.currentPlayer.id !== currentPlayerData.id)) {
+            loadPlayerDetails(data.currentPlayer.id);
+          }
+        } else if (data.status === 'waiting') {
+          auctionStatusBadge.textContent = 'Waiting for Next Player';
+          auctionStatusBadge.className = 'badge bg-info';
+          
+          // Show waiting message
+          waitingMessage.style.display = 'block';
+          auctionContainer.style.display = 'none';
+        } else if (data.status === 'paused') {
+          auctionStatusBadge.textContent = 'Auction Paused';
+          auctionStatusBadge.className = 'badge bg-warning';
+          
+          // Keep showing the current player but indicate paused state
+          if (data.currentPlayer) {
+            waitingMessage.style.display = 'none';
+            auctionContainer.style.display = 'flex';
+            
+            bidTimer.textContent = "PAUSED";
+            bidTimer.classList.add('warning');
+            
+            // Disable bid button
+            if (placeBidBtn) {
+              placeBidBtn.disabled = true;
+            }
+          } else {
+            // No current player, show waiting message
+            waitingMessage.style.display = 'block';
+            auctionContainer.style.display = 'none';
+          }
+        } else {
+          auctionStatusBadge.textContent = 'Auction Not Running';
+          auctionStatusBadge.className = 'badge bg-secondary';
+          
+          // Show waiting message
+          waitingMessage.style.display = 'block';
+          auctionContainer.style.display = 'none';
+          
+          // Reset player data
+          currentPlayerData = null;
+        }
+      }
+      
+      // Load player details
+      function loadPlayerDetails(playerId) {
+        if (!playerId) return;
+        
+        // Update hidden input
+        if (currentPlayerId) {
+          currentPlayerId.value = playerId;
+        }
+        
+        // Show loading state
+        playerName.textContent = 'Loading player...';
+        playerRole.textContent = '-';
+        playerBasePrice.textContent = '-';
+        playerRoleBadge.textContent = '';
+        currentBid.textContent = 'No bids yet';
+        currentBidder.textContent = 'None';
+        bidHistory.innerHTML = '<li class="list-group-item text-center">Loading bids...</li>';
+        
+        fetch(`/auction/player/${playerId}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            currentPlayerData = data.player;
+            
+            // Update player details
+            playerName.textContent = data.player.name;
+            playerRole.textContent = data.player.role;
+            playerRoleBadge.textContent = data.player.role;
+            playerBasePrice.textContent = formatCurrency(data.player.base_price);
+            
+            // Set role badge color based on player role
+            const roleColors = {
+              'Batsman': 'bg-danger',
+              'Bowler': 'bg-success',
+              'All-rounder': 'bg-warning',
+              'Wicket-keeper': 'bg-info'
+            };
+            
+            playerRoleBadge.className = 'badge badge-role ' + 
+              (roleColors[data.player.role] || 'bg-secondary');
+            
+            // Display highest bid if exists
+            if (data.highestBid) {
+              currentBid.textContent = formatCurrency(data.highestBid.amount);
+              currentBidder.textContent = data.highestBid.team_name;
+              currentBid.classList.add('text-success');
+              
+              // Set minimum bid amount to highest bid + increment
+              const nextBidAmount = data.highestBid.amount + 10000;
+              if (bidAmount) {
+                bidAmount.min = nextBidAmount;
+                bidAmount.value = nextBidAmount;
+                minBid.textContent = formatCurrency(nextBidAmount);
+              }
+            } else {
+              currentBid.textContent = 'No bids yet';
+              currentBidder.textContent = 'None';
+              currentBid.classList.remove('text-success');
+              
+              // Set minimum bid amount to base price
+              if (bidAmount) {
+                bidAmount.min = data.player.base_price;
+                bidAmount.value = data.player.base_price;
+                minBid.textContent = formatCurrency(data.player.base_price);
+              }
+            }
+            
+            // Update bid history
+            loadBidHistory(playerId);
+            
+            // Enable bid button if logged in
+            if (placeBidBtn) {
+              placeBidBtn.disabled = false;
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching player details:', error);
+            playerName.textContent = 'Error loading player';
+            alert('Error loading player details. Please try again.');
+          });
+      }
+      
+      // Load bid history
+      function loadBidHistory(playerId) {
+        fetch(`/auction/player/${playerId}`)
+          .then(response => response.json())
+          .then(data => {
+            updateBidHistory(data.bids);
+          })
+          .catch(error => {
+            console.error('Error loading bid history:', error);
+          });
+      }
+      
+      // Update bid history
+      function updateBidHistory(bids) {
+        bidHistory.innerHTML = '';
+        
+        if (bids && bids.length > 0) {
+          bids.forEach((bid, index) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item bid-history-item';
+            
+            // Add "highest" badge for the most recent bid
+            if (index === 0) {
+              li.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>${bid.team_name}</strong>
+                    <div>${formatCurrency(bid.amount)}</div>
+                  </div>
+                  <span class="badge bg-success">Highest</span>
+                </div>
+              `;
+            } else {
+              li.innerHTML = `
+                <div>
+                  <strong>${bid.team_name}</strong>
+                  <div>${formatCurrency(bid.amount)}</div>
+                </div>
+              `;
+            }
+            
+            bidHistory.appendChild(li);
+          });
+        } else {
+          bidHistory.innerHTML = '<li class="list-group-item text-center">No bids yet</li>';
+        }
+      }
+      
+      // Handle bid submission
+      if (bidForm) {
+        bidForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          const amount = parseInt(bidAmount.value);
+          const playerId = currentPlayerId.value;
+          
+          if (!amount || !playerId) {
+            alert('Please wait for a player to be on auction and enter a valid bid amount.');
+            return;
+          }
+          
+          // Disable button and show loading state
+          placeBidBtn.disabled = true;
+          placeBidBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+          
+          // Submit bid
+          fetch('/auction/bid', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              player_id: playerId,
+              team_id: teamId.value,
+              amount: amount
+            })
+          })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(err => { throw new Error(err.error) });
+            }
+            return response.json();
+          })
+          .then(data => {
+            // Show success toast
+            const toastContainer = document.createElement('div');
+            toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+            toastContainer.style.zIndex = '5';
+            toastContainer.innerHTML = `
+              <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-success text-white">
+                  <strong class="me-auto">Success</strong>
+                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                  Bid placed successfully!
+                </div>
+              </div>
+            `;
+            document.body.appendChild(toastContainer);
+            
+            // Remove toast after 3 seconds
+            setTimeout(() => {
+              toastContainer.remove();
+            }, 3000);
+            
+            // Reset button state
+            placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+            placeBidBtn.disabled = false;
+          })
+          .catch(error => {
+            // Reset button state
+            placeBidBtn.disabled = false;
+            placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+            
+            // Show error alert
+            alert('Error placing bid: ' + error.message);
+          });
+        });
+      }
+      
+      // Initialize Socket.IO
+      initializeSocket();
+      
+      // Initial auction status check
+      fetch('/auction/status')
+        .then(response => response.json())
+        .then(data => {
+          handleAuctionStatus(data);
+        })
+        .catch(error => {
+          console.error('Error fetching auction status:', error);
+        });
+    });
+  </script>
+</body>
+</html>

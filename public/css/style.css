@@ -1,0 +1,300 @@
+/* Main styles for the cricket auction application */
+
+/* Global Variables */
+:root {
+  --primary-color: #007bff;
+  --secondary-color: #6c757d;
+  --light-bg: #f8f9fa;
+  --dark-bg: #343a40;
+  --text-color: #333;
+  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --card-shadow-hover: 0 8px 15px rgba(0, 0, 0, 0.1);
+  --transition-speed: 0.3s;
+}
+
+/* Base Styles */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--light-bg);
+  color: var(--text-color);
+  line-height: 1.6;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* Navbar customization */
+.navbar-brand {
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+.navbar {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-link {
+  position: relative;
+  transition: color var(--transition-speed) ease;
+}
+
+.nav-link:after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: var(--primary-color);
+  transition: width var(--transition-speed) ease;
+}
+
+.nav-link:hover:after {
+  width: 100%;
+}
+
+/* Cards */
+.card {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s, box-shadow 0.3s;
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+  font-weight: 600;
+}
+
+/* Tables */
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+.table-striped tbody tr:hover {
+  background-color: #f1f1f1;
+}
+
+/* Buttons */
+.btn {
+  border-radius: 5px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+  background-color: #0b5ed7;
+  border-color: #0a58ca;
+}
+
+/* Auction page specific styles */
+#current-player, #bid-history {
+  min-height: 200px;
+}
+
+#player-details h3 {
+  color: var(--primary-color);
+  font-weight: 600;
+  border-bottom: 2px solid rgba(0, 123, 255, 0.2);
+  padding-bottom: 8px;
+}
+
+#bid-history .list-group-item {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  border-left: 3px solid transparent;
+  transition: background-color var(--transition-speed) ease;
+}
+
+#bid-history .list-group-item:hover {
+  background-color: rgba(0, 123, 255, 0.05);
+  border-left-color: var(--primary-color);
+}
+
+/* Team cards */
+.team-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.team-card .card-body {
+  flex: 1;
+}
+
+/* Admin dashboard */
+.admin-panel {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+  .container {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  
+  h1 {
+    font-size: 1.8rem;
+  }
+  
+  .card-body {
+    padding: 15px;
+  }
+  
+  .btn {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Custom form styling */
+.form-control, .form-select {
+  border-radius: 5px;
+  border: 1px solid #ced4da;
+  padding: 0.5rem 0.75rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Footer */
+footer {
+  margin-top: 50px;
+  padding: 30px 0;
+  background-color: var(--dark-bg);
+  color: #fff;
+  border-top: 1px solid #dee2e6;
+}
+
+footer a {
+  color: rgba(255, 255, 255, 0.8);
+  transition: color var(--transition-speed) ease;
+}
+
+footer a:hover {
+  color: #fff;
+  text-decoration: none;
+}
+
+/* Badges */
+.badge {
+  padding: 5px 10px;
+  border-radius: 50px;
+  font-weight: 500;
+}
+
+/* Welcome card specific styling */
+.welcome-card {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Feature cards */
+.feature {
+  border-radius: 8px;
+  transition: all var(--transition-speed) ease;
+}
+
+.feature i {
+  transition: transform 0.5s ease;
+}
+
+.feature:hover i {
+  transform: scale(1.2);
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+}
+
+/* Feature Icons */
+.feature-icon {
+  display: inline-block;
+  background-color: #f8f9fa;
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Team Dashboard */
+.team-info h4 {
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .hero-section {
+    padding: 30px 0;
+  }
+  
+  .feature-icon {
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    font-size: 2rem;
+  }
+}
+
+/* Utility Classes */
+.shadow {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.shadow-lg {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15) !important;
+}
