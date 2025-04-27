@@ -1,112 +1,243 @@
-const db = require('../utils/database');
+const fs = require('fs');
+const path = require('path');
 
 /**
- * AuctionResult model
- * Represents the result of a player auction
+ * Class representing an auction result
  */
 class AuctionResult {
+  /**
+   * Create a new auction result
+   * @param {Object} data - Auction result data
+   * @param {Date} data.endTime - Time when the auction ended
+   * @param {String} data.endedBy - Username of admin who ended the auction
+   * @param {Array} data.soldPlayers - Array of players sold in the auction
+   * @param {Number} data.totalAmount - Total amount spent in the auction
+   */
   constructor(data) {
-    this._id = data.id || data._id;
-    this.player_id = data.player_id;
-    this.team_id = data.team_id;
-    this.amount = data.amount;
-    this.status = data.status; // 'sold', 'unsold'
-    this.timestamp = data.timestamp || new Date();
+    this.id = data.id || Date.now().toString();
+    this.endTime = data.endTime || new Date().toISOString();
+    this.endedBy = data.endedBy || 'system';
+    this.soldPlayers = data.soldPlayers || [];
+    this.unsoldPlayers = data.unsoldPlayers || [];
+    this.totalAmount = data.totalAmount || 0;
+    this.totalPlayers = data.totalPlayers || 0;
+    this.teamsParticipated = data.teamsParticipated || [];
+    this.reason = data.reason || 'Auction completed';
+    this.createdAt = data.createdAt || new Date().toISOString();
   }
 
-  // Create a new auction result
-  static async create(data) {
+  /**
+   * Save the auction result to the database
+   * @returns {Promise<Object>} - Saved auction result
+   */
+  async save() {
     try {
-      const query = `
-        INSERT INTO auction_results (player_id, team_id, amount, status, timestamp)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `;
+      const resultsDir = path.join(__dirname, '../data/auction_results');
       
-      const values = [
-        data.player_id,
-        data.team_id,
-        data.amount,
-        data.status,
-        data.timestamp || new Date()
-      ];
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(resultsDir)) {
+        fs.mkdirSync(resultsDir, { recursive: true });
+      }
       
-      const result = await db.query(query, values);
-      return new AuctionResult(result.rows[0]);
+      const filePath = path.join(resultsDir, `${this.id}.json`);
+      await fs.promises.writeFile(filePath, JSON.stringify(this, null, 2));
+      
+      // Update the index file with all results
+      const results = await AuctionResult.getAllResults();
+      const exists = results.find(result => result.id === this.id);
+      
+      if (!exists) {
+        results.push(this);
+      } else {
+        // Update existing result
+        const index = results.findIndex(result => result.id === this.id);
+        if (index !== -1) {
+          results[index] = this;
+        }
+      }
+      
+      const indexPath = path.join(resultsDir, 'index.json');
+      await fs.promises.writeFile(indexPath, JSON.stringify(results, null, 2));
+      
+      return this;
     } catch (error) {
-      console.error('Error creating auction result:', error);
+      console.error('Error saving auction result:', error);
       throw error;
     }
   }
 
-  // Get all auction results
-  static async getAll() {
+  /**
+   * Retrieve all auction results
+   * @returns {Promise<Array>} - Array of auction results
+   */
+  static async getAllResults() {
     try {
-      const query = `
-        SELECT ar.*, p.name as player_name, t.name as team_name
-        FROM auction_results ar
-        LEFT JOIN players p ON ar.player_id = p.id
-        LEFT JOIN teams t ON ar.team_id = t.id
-        ORDER BY ar.timestamp DESC
-      `;
+      const resultsDir = path.join(__dirname, '../data/auction_results');
+      const indexPath = path.join(resultsDir, 'index.json');
       
-      const result = await db.query(query);
-      return result.rows;
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(resultsDir)) {
+        fs.mkdirSync(resultsDir, { recursive: true });
+      }
+      
+      // Create index file if it doesn't exist
+      if (!fs.existsSync(indexPath)) {
+        await fs.promises.writeFile(indexPath, JSON.stringify([], null, 2));
+        return [];
+      }
+      
+      const data = await fs.promises.readFile(indexPath, 'utf8');
+      const results = JSON.parse(data);
+      
+      // Convert plain objects to AuctionResult instances
+      return results.map(result => new AuctionResult(result));
     } catch (error) {
       console.error('Error getting auction results:', error);
-      throw error;
+      return [];
     }
   }
 
-  // Get auction results for a specific player
-  static async getByPlayer(playerId) {
-    try {
-      const query = `
-        SELECT ar.*, t.name as team_name
-        FROM auction_results ar
-        LEFT JOIN teams t ON ar.team_id = t.id
-        WHERE ar.player_id = $1
-      `;
+  /**
+   * Calculate auction statistics
+   * @returns {Object} - Auction statistics
+   */
+  calculateStatistics() {
+    // Group players by team
+    const teamStats = {};
+    let highestBid = { amount: 0, player: null };
+    let teamWithMostPlayers = { count: 0, team: null };
+
+    this.soldPlayers.forEach(player => {
+      // Track team statistics
+      if (!teamStats[player.teamId]) {
+        teamStats[player.teamId] = {
+          teamName: player.teamName,
+          playerCount: 0,
+          totalSpent: 0,
+          players: []
+        };
+      }
       
-      const result = await db.query(query, [playerId]);
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } catch (error) {
-      console.error('Error getting auction result for player:', error);
-      throw error;
-    }
-  }
-
-  // Get auction results for a specific team
-  static async getByTeam(teamId) {
-    try {
-      const query = `
-        SELECT ar.*, p.name as player_name, p.role as player_role, p.base_price
-        FROM auction_results ar
-        LEFT JOIN players p ON ar.player_id = p.id
-        WHERE ar.team_id = $1
-        ORDER BY ar.amount DESC
-      `;
+      const team = teamStats[player.teamId];
+      team.playerCount++;
+      team.totalSpent += player.soldAmount;
+      team.players.push({
+        name: player.name,
+        role: player.role,
+        amount: player.soldAmount
+      });
       
-      const result = await db.query(query, [teamId]);
-      return result.rows;
-    } catch (error) {
-      console.error('Error getting auction results for team:', error);
-      throw error;
-    }
-  }
-
-  // Mock implementation for development
-  static mockCreate(data) {
-    console.log('Using mock create for AuctionResult model');
-    // Return a mock auction result
-    return Promise.resolve({
-      _id: 'mock-result-id',
-      player_id: data.player_id,
-      team_id: data.team_id,
-      amount: data.amount,
-      status: data.status,
-      timestamp: new Date()
+      // Track highest bid
+      if (player.soldAmount > highestBid.amount) {
+        highestBid = {
+          amount: player.soldAmount,
+          player: player.name,
+          team: player.teamName
+        };
+      }
+      
+      // Update team with most players
+      if (team.playerCount > teamWithMostPlayers.count) {
+        teamWithMostPlayers = {
+          count: team.playerCount,
+          team: player.teamName
+        };
+      }
     });
+
+    // Calculate teams by spending brackets
+    const spendingBrackets = {
+      high: { min: 1000000, teams: [] },
+      medium: { min: 500000, max: 999999, teams: [] },
+      low: { max: 499999, teams: [] }
+    };
+
+    Object.values(teamStats).forEach(team => {
+      if (team.totalSpent >= spendingBrackets.high.min) {
+        spendingBrackets.high.teams.push({ name: team.teamName, spent: team.totalSpent });
+      } else if (team.totalSpent >= spendingBrackets.medium.min) {
+        spendingBrackets.medium.teams.push({ name: team.teamName, spent: team.totalSpent });
+      } else {
+        spendingBrackets.low.teams.push({ name: team.teamName, spent: team.totalSpent });
+      }
+    });
+
+    return {
+      teamStats,
+      highestBid,
+      teamWithMostPlayers,
+      spendingBrackets,
+      playersByRole: this.getPlayersByRole(),
+      totalSold: this.soldPlayers.length,
+      totalUnsold: this.unsoldPlayers.length,
+      totalAmount: this.totalAmount
+    };
+  }
+
+  getPlayersByRole() {
+    const roleStats = {};
+    
+    this.soldPlayers.forEach(player => {
+      if (!roleStats[player.role]) {
+        roleStats[player.role] = {
+          count: 0,
+          totalAmount: 0,
+          players: []
+        };
+      }
+      
+      roleStats[player.role].count++;
+      roleStats[player.role].totalAmount += player.soldAmount;
+      roleStats[player.role].players.push({
+        name: player.name,
+        team: player.teamName,
+        amount: player.soldAmount
+      });
+    });
+    
+    return roleStats;
+  }
+
+  static async getResultById(id) {
+    try {
+      const resultsDir = path.join(__dirname, '../data/auction_results');
+      const filePath = path.join(resultsDir, `${id}.json`);
+      
+      if (!fs.existsSync(filePath)) {
+        return null;
+      }
+      
+      const data = await fs.promises.readFile(filePath, 'utf8');
+      const result = JSON.parse(data);
+      
+      return new AuctionResult(result);
+    } catch (error) {
+      console.error(`Error getting auction result with id ${id}:`, error);
+      return null;
+    }
+  }
+
+  static async deleteResult(id) {
+    try {
+      const resultsDir = path.join(__dirname, '../data/auction_results');
+      const filePath = path.join(resultsDir, `${id}.json`);
+      
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+      }
+      
+      // Update the index file
+      const results = await AuctionResult.getAllResults();
+      const updatedResults = results.filter(result => result.id !== id);
+      
+      const indexPath = path.join(resultsDir, 'index.json');
+      await fs.promises.writeFile(indexPath, JSON.stringify(updatedResults, null, 2));
+      
+      return true;
+    } catch (error) {
+      console.error(`Error deleting auction result with id ${id}:`, error);
+      return false;
+    }
   }
 }
 

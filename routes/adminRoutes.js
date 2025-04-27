@@ -5,6 +5,7 @@ const adminAuthController = require('../controllers/adminAuthController');
 const auctionController = require('../controllers/auctionController');
 const auctionAdminController = require('../controllers/auctionAdminController');
 const { isAuctionAdmin, validatePauseAuction, validateEndAuction } = require('../middleware/auctionAdminMiddleware');
+const AuctionResult = require('../models/auctionResult');
 
 // Admin authentication routes
 router.get('/login', adminAuthController.showLoginPage);
@@ -52,6 +53,54 @@ router.get('/auction/admin-stats',
   isAuctionAdmin, 
   auctionAdminController.getAuctionAdminStats
 );
+
+// Auction Results Routes
+router.get('/auction/results', async (req, res) => {
+  try {
+    const results = await AuctionResult.getAllResults();
+    res.status(200).json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('Error fetching auction results:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch auction results',
+      error: error.message
+    });
+  }
+});
+
+router.get('/auction/results/latest', async (req, res) => {
+  try {
+    const results = await AuctionResult.getAllResults();
+    const latestResult = results.length > 0 ? results[results.length - 1] : null;
+    
+    if (!latestResult) {
+      return res.status(404).json({
+        success: false,
+        message: 'No auction results found'
+      });
+    }
+    
+    // Calculate statistics for the latest result
+    const statistics = latestResult.calculateStatistics();
+    
+    res.status(200).json({
+      success: true,
+      result: latestResult,
+      statistics
+    });
+  } catch (error) {
+    console.error('Error fetching latest auction result:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch latest auction result',
+      error: error.message
+    });
+  }
+});
 
 // Original routes (can be migrated later)
 router.post('/auction/next', adminAuthController.isAuthenticated, auctionController.skipToNextPlayer);

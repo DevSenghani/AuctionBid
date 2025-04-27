@@ -4,6 +4,7 @@
  */
 
 const socketAuthMiddleware = require('../middleware/socketAuthMiddleware');
+const { auctionState, timerManager } = require('../auction');
 
 // Import modules with error handling
 let bidModel, teamModel, playerModel, config;
@@ -89,11 +90,33 @@ module.exports = (io) => {
           });
         }
         
+        // Check if auction is actually running
+        if (!auctionState.isRunning || auctionState.isPaused) {
+          return socket.emit('bid_error', { 
+            message: 'Auction is not active' 
+          });
+        }
+        
+        // Check if this player is the current player being auctioned
+        const currentPlayerId = auctionState.currentPlayer?.id || auctionState.currentPlayer?._id;
+        if (currentPlayerId != player_id) { // Using loose comparison for both string and object IDs
+          return socket.emit('bid_error', { 
+            message: 'This player is not currently being auctioned' 
+          });
+        }
+        
         // Get current highest bid
         const highestBid = await bidModel.getHighestBid(player_id);
         
         // Validate bid amount
         if (highestBid && amount <= highestBid.amount) {
+          return socket.emit('bid_error', { 
+            message: 'Bid amount must be higher than current highest bid' 
+          });
+        }
+        
+        // Also check against the global state
+        if (amount <= auctionState.highestBid) {
           return socket.emit('bid_error', { 
             message: 'Bid amount must be higher than current highest bid' 
           });
@@ -111,8 +134,18 @@ module.exports = (io) => {
         // Save bid to database
         await bidModel.createBid(newBid);
         
+        // Update the global auction state *** IMPORTANT ***
+        auctionState.highestBid = amount;
+        auctionState.highestBidder = team;
+        
         // Emit the bid to all clients in auction room
         bidNamespace.to('auction_room').emit('new-bid', {
+          ...newBid,
+          player_name: player.name
+        });
+        
+        // Also emit to main namespace for compatibility
+        io.to('auction').emit('new-bid', {
           ...newBid,
           player_name: player.name
         });
@@ -120,9 +153,23 @@ module.exports = (io) => {
         // Emit success to the bidding team
         socket.emit('bid_placed', { 
           success: true, 
-          message: 'Bid placed successfully. Player will be sold to you as the highest bidder.',
+          message: 'Bid placed successfully. You are now the highest bidder.',
           amount: amount
         });
+        
+        // Reset the bid timer if it's getting low (less than 15 seconds)
+        const remainingTime = timerManager.getRemainingBidTime();
+        if (remainingTime < 15) {
+          console.log('Extending bid timer after new bid');
+          // Stop and restart the timer
+          timerManager.stopBidTimer();
+          // Use the finalizePlayerSale function from auction controller
+          const { finalizePlayerSale } = require('../controllers/auctionController');
+          timerManager.startBidTimer(() => {
+            // When timer completes, finalize sale
+            finalizePlayerSale(true);
+          });
+        }
         
       } catch (error) {
         console.error('Error processing bid:', error);

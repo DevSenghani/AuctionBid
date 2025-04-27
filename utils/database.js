@@ -85,8 +85,153 @@ const query = async (text, params) => {
   }
 };
 
+/**
+ * Save auction results to the database when an auction ends
+ * @param {Object} data - Auction results data
+ * @param {Date} data.endTime - Time when the auction ended
+ * @param {String} data.endedBy - Username of admin who ended the auction
+ * @param {Array} data.soldPlayers - Array of players sold in the auction
+ * @param {Number} data.totalAmount - Total amount spent in the auction
+ * @returns {Promise<Object>} - Result of the save operation
+ */
+const saveAuctionResults = async (data) => {
+  try {
+    if (mockDb) {
+      console.log('Using mock database for saving auction results');
+      console.log('Saving auction results:', data);
+      return Promise.resolve({ 
+        id: 'mock-auction-result-id',
+        end_time: data.endTime,
+        ended_by: data.endedBy,
+        total_amount: data.totalAmount,
+        players_sold: data.soldPlayers.length
+      });
+    }
+
+    // First, create a record in the auction_summary table
+    const summaryQuery = `
+      INSERT INTO auction_summary (
+        end_time, 
+        ended_by, 
+        total_amount, 
+        players_sold
+      ) VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `;
+    
+    const summaryValues = [
+      data.endTime,
+      data.endedBy,
+      data.totalAmount,
+      data.soldPlayers.length
+    ];
+    
+    const summaryResult = await query(summaryQuery, summaryValues);
+    const auctionSummaryId = summaryResult.rows[0].id;
+    
+    // Then save individual player results
+    if (data.soldPlayers && data.soldPlayers.length > 0) {
+      // Process each sold player in a transaction
+      await Promise.all(data.soldPlayers.map(async (player) => {
+        // Save individual player result
+        const resultQuery = `
+          INSERT INTO auction_results (
+            auction_summary_id,
+            player_id,
+            team_id,
+            amount,
+            status
+          ) VALUES ($1, $2, $3, $4, $5)
+        `;
+        
+        const resultValues = [
+          auctionSummaryId,
+          player.id,
+          player.teamId,
+          player.amount,
+          'sold'
+        ];
+        
+        return query(resultQuery, resultValues);
+      }));
+    }
+    
+    console.log(`Auction results saved successfully with ID: ${auctionSummaryId}`);
+    return { id: auctionSummaryId };
+  } catch (error) {
+    console.error('Error saving auction results:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get all auction results
+ * @returns {Promise<Array>} - Array of auction results
+ */
+const getAuctionResults = async () => {
+  try {
+    if (mockDb) {
+      console.log('Using mock database for getting auction results');
+      return Promise.resolve([
+        {
+          id: 'mock-summary-id',
+          end_time: new Date(),
+          ended_by: 'Mock Admin',
+          total_amount: 5000000,
+          players_sold: 10,
+          results: [
+            {
+              player_id: 1,
+              player_name: 'MS Dhoni',
+              team_id: 1,
+              team_name: 'Mumbai Indians',
+              amount: 1000000,
+              status: 'sold'
+            }
+          ]
+        }
+      ]);
+    }
+
+    // Get all auction summaries
+    const summariesQuery = `
+      SELECT * FROM auction_summary
+      ORDER BY end_time DESC
+    `;
+    
+    const summariesResult = await query(summariesQuery);
+    const summaries = summariesResult.rows;
+    
+    // For each summary, get the detailed results
+    const detailedResults = await Promise.all(summaries.map(async (summary) => {
+      const resultsQuery = `
+        SELECT ar.*, p.name as player_name, p.role as player_role, 
+               t.name as team_name, t.owner as team_owner
+        FROM auction_results ar
+        LEFT JOIN players p ON ar.player_id = p.id
+        LEFT JOIN teams t ON ar.team_id = t.id
+        WHERE ar.auction_summary_id = $1
+      `;
+      
+      const resultsResult = await query(resultsQuery, [summary.id]);
+      
+      return {
+        ...summary,
+        results: resultsResult.rows
+      };
+    }));
+    
+    return detailedResults;
+  } catch (error) {
+    console.error('Error getting auction results:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   query,
   pool: mockDb ? null : pool,
-  isMockDb: () => mockDb
+  isMockDb: () => mockDb,
+  saveAuctionResults,
+  getAuctionResults
 }; 

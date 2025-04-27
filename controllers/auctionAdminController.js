@@ -10,11 +10,14 @@ const playerModel = require('../models/playerModel');
 const teamModel = require('../models/teamModel');
 const db = require('../utils/database');
 const { notifyAdminAction } = require('../middleware/auctionAdminMiddleware');
+const AuctionResult = require('../models/auctionResult');
 
 // Enhanced pause auction function with improved error handling and notifications
 exports.pauseAuction = async (req, res) => {
   try {
-    console.log(`Admin ${req.adminInfo?.username} is pausing the auction`);
+    // Get admin username from the session or request
+    const adminUsername = req.adminUser?.username || req.session?.adminUsername || 'Admin';
+    console.log(`Admin ${adminUsername} is pausing the auction`);
     
     // Save the current state for resuming later
     const pauseReason = req.body.reason || 'Administrative action';
@@ -42,7 +45,7 @@ exports.pauseAuction = async (req, res) => {
       timeRemaining: auctionState.isWaiting ? 
                      timerManager.getRemainingWaitingTime() : 
                      timerManager.getRemainingBidTime(),
-      adminUser: req.adminInfo?.username,
+      adminUser: adminUsername,
       message: `Auction has been paused by admin${pauseReason ? ': ' + pauseReason : ''}`
     };
     
@@ -61,7 +64,7 @@ exports.pauseAuction = async (req, res) => {
     
     // Notify all clients about the pause
     notifyAdminAction('pause_auction', 
-      `Auction has been paused by admin ${req.adminInfo?.username}${pauseReason ? ' - ' + pauseReason : ''}`,
+      `Auction has been paused by admin ${adminUsername}${pauseReason ? ' - ' + pauseReason : ''}`,
       { currentPlayer: currentPlayerName, pauseTime: pauseTime }
     );
     
@@ -86,7 +89,9 @@ exports.pauseAuction = async (req, res) => {
 // Enhanced end auction function with improved error handling, notifications, and cleanup
 exports.endAuction = async (req, res) => {
   try {
-    console.log(`Admin ${req.adminInfo?.username} is ending the auction`);
+    // Get admin username from the session or request
+    const adminUsername = req.adminUser?.username || req.session?.adminUsername || 'Admin';
+    console.log(`Admin ${adminUsername} is ending the auction`);
     
     // Record auction end time and reason
     const endTime = new Date();
@@ -114,7 +119,7 @@ exports.endAuction = async (req, res) => {
       status: 'ended',
       endTime: endTime,
       endReason: endReason,
-      adminUser: req.adminInfo?.username,
+      adminUser: adminUsername,
       message: `Auction has been ended by admin${endReason ? ': ' + endReason : ''}`,
       summary: {
         soldPlayers: soldPlayersCount,
@@ -128,7 +133,7 @@ exports.endAuction = async (req, res) => {
     
     // Notify all clients about the auction end
     notifyAdminAction('end_auction', 
-      `Auction has been ended by admin ${req.adminInfo?.username}${endReason ? ' - ' + endReason : ''}`,
+      `Auction has been ended by admin ${adminUsername}${endReason ? ' - ' + endReason : ''}`,
       { 
         endTime: endTime,
         soldPlayers: soldPlayersCount,
@@ -138,29 +143,36 @@ exports.endAuction = async (req, res) => {
     
     // Write auction results to database if needed
     try {
-      await db.saveAuctionResults({
+      // Create and save a new auction result using the model
+      const auctionResult = new AuctionResult({
         endTime: endTime,
-        endedBy: req.adminInfo?.username,
+        endedBy: adminUsername,
         soldPlayers: auctionState.soldPlayers,
         totalAmount: playerSummary.totalAmount
       });
+      
+      await auctionResult.save();
+      
+      // Calculate statistics for response
+      const statistics = auctionResult.calculateStatistics();
+      
+      return res.status(200).json({ 
+        success: true,
+        message: 'Auction ended successfully', 
+        ended_at: endTime,
+        status: 'ended',
+        summary: statistics
+      });
     } catch (dbError) {
       console.error('Error saving auction results to database:', dbError);
-      // Continue with the response even if database save fails
+      // Still return success for ending the auction, but with a warning
+      return res.status(200).json({
+        success: true,
+        message: 'Auction ended successfully, but there was an error saving results',
+        status: statusObj,
+        warning: dbError.message
+      });
     }
-    
-    // Return success response with summary
-    return res.status(200).json({ 
-      success: true,
-      message: 'Auction ended successfully', 
-      ended_at: endTime,
-      status: 'ended',
-      summary: {
-        soldPlayers: soldPlayersCount,
-        totalAmount: playerSummary.totalAmount,
-        teamsParticipated: playerSummary.teamsParticipated
-      }
-    });
   } catch (error) {
     console.error('Error ending auction:', error);
     return res.status(500).json({ 

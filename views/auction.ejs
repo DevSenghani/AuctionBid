@@ -369,14 +369,24 @@
         
         // Listen for new bids (on both sockets for backward compatibility)
         socket.on('new-bid', (data) => {
-          if (currentPlayerId && currentPlayerId.value === data.player_id) {
+          console.log('Received new bid from main socket:', data);
+          // Check if this bid is for the current player
+          const currentId = currentPlayerId?.value;
+          const bidPlayerId = data.player_id || data.playerId;
+          
+          if (currentId && (bidPlayerId == currentId)) { // Using loose comparison for both string and object IDs
             updateBidInfo(data);
           }
         });
         
         // Listen for new bids on bidSocket
         bidSocket.on('new-bid', (data) => {
-          if (currentPlayerId && currentPlayerId.value === data.player_id) {
+          console.log('Received new bid from bid socket:', data);
+          // Check if this bid is for the current player
+          const currentId = currentPlayerId?.value;
+          const bidPlayerId = data.player_id || data.playerId;
+          
+          if (currentId && (bidPlayerId == currentId)) { // Using loose comparison for both string and object IDs
             updateBidInfo(data);
           }
         });
@@ -419,6 +429,16 @@
         // Listen for player unsold
         socket.on('player-unsold', (data) => {
           showPlayerUnsoldMessage(data);
+        });
+        
+        // Listen for auction result (handles both sold and unsold)
+        socket.on('auction-result', (result) => {
+          console.log('Received auction result:', result);
+          if (result.result === 'sold') {
+            showPlayerSoldMessage(result);
+          } else if (result.result === 'unsold') {
+            showPlayerUnsoldMessage(result);
+          }
         });
         
         // Listen for waiting countdown
@@ -491,6 +511,19 @@
         const toastContainer = document.createElement('div');
         toastContainer.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3';
         toastContainer.style.zIndex = '5';
+        
+        // Get player name from the data, handling different formats
+        const playerName = data.player ? data.player.name : (data.playerName || 'Player');
+        
+        // Handle different data formats for team
+        const teamName = data.team ? data.team.name : (data.teamName || 'Unknown Team');
+        
+        // Handle different data formats for amount
+        const amount = data.amount || 0;
+        
+        // Get appropriate message, falling back to default if none provided
+        const message = data.message || `Sold to ${teamName} for ${formatCurrency(amount)}`;
+        
         toastContainer.innerHTML = `
           <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="toast-header bg-success text-white">
@@ -498,8 +531,8 @@
               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body text-center">
-              <h5>${data.player.name}</h5>
-              <p>Sold to <strong>${data.team.name}</strong> for <strong>${formatCurrency(data.amount)}</strong></p>
+              <h5>${playerName}</h5>
+              <p>${message}</p>
             </div>
           </div>
         `;
@@ -517,6 +550,13 @@
         const toastContainer = document.createElement('div');
         toastContainer.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3';
         toastContainer.style.zIndex = '5';
+        
+        // Get player name from the data, handling different formats
+        const playerName = data.player ? data.player.name : (data.playerName || 'Player');
+        
+        // Get appropriate message, falling back to default if none provided
+        const message = data.message || 'No bids received - marked as unsold';
+        
         toastContainer.innerHTML = `
           <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="toast-header bg-secondary text-white">
@@ -524,8 +564,8 @@
               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body text-center">
-              <h5>${data.player.name}</h5>
-              <p>No bids received - marked as unsold</p>
+              <h5>${playerName}</h5>
+              <p>${message}</p>
             </div>
           </div>
         `;
@@ -540,13 +580,19 @@
       
       // Update bid info when new bid comes in
       function updateBidInfo(bid) {
+        console.log('Updating bid info with:', bid);
+        
+        // Standardize field names (accept either format)
+        const amount = bid.amount;
+        const teamName = bid.team_name || bid.teamName;
+        
         // Update highest bid
-        currentBid.textContent = formatCurrency(bid.amount);
-        currentBidder.textContent = bid.team_name;
+        currentBid.textContent = formatCurrency(amount);
+        currentBidder.textContent = teamName;
         currentBid.classList.add('text-success');
         
         // Set minimum bid amount to highest bid + increment
-        const nextBidAmount = parseInt(bid.amount) + 10000;
+        const nextBidAmount = parseInt(amount) + 10000;
         if (bidAmount) {
           bidAmount.min = nextBidAmount;
           bidAmount.value = nextBidAmount;
@@ -554,7 +600,10 @@
         }
         
         // Update bid history
-        loadBidHistory(currentPlayerId.value);
+        const playerId = bid.player_id || bid.playerId;
+        if (playerId) {
+          loadBidHistory(playerId);
+        }
         
         // Show a toast notification
         const toastContainer = document.createElement('div');
@@ -567,7 +616,7 @@
               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body">
-              <strong>${bid.team_name}</strong> placed a bid of ${formatCurrency(bid.amount)}
+              <strong>${teamName}</strong> placed a bid of ${formatCurrency(amount)}
             </div>
           </div>
         `;

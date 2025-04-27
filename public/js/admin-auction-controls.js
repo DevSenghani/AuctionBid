@@ -9,16 +9,34 @@ document.addEventListener('DOMContentLoaded', function() {
   const endAuctionBtn = document.getElementById('end-auction-btn');
   const startAuctionBtn = document.getElementById('start-auction-btn');
   const auctionStatusText = document.getElementById('auction-status-text');
+  const auctionStatusMessage = document.getElementById('auction-status-message');
+  const auctionPlayerCount = document.getElementById('auction-player-count');
   
-  // Socket connection for real-time updates
+  // Initialize socket connection for real-time updates
   const socket = io('', {
     auth: {
       isAdmin: true
     }
   });
   
+  console.log('Admin auction controls initialized');
+  
+  // Fetch initial auction status
+  fetchAuctionStatus();
+
+  // Socket event listeners
+  socket.on('connect', () => {
+    console.log('Connected to socket server with ID:', socket.id);
+    fetchAuctionStatus(); // Refresh status once connected
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Disconnected from socket server');
+  });
+  
   // Listen for admin action events
   socket.on('admin-action', (data) => {
+    console.log('Admin action received:', data);
     showAdminNotification(data.message, 
       data.action === 'pause_auction' ? 'warning' : 
       data.action === 'end_auction' ? 'danger' : 'info');
@@ -26,8 +44,130 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Listen for auction state changes
   socket.on('auction-state-change', (data) => {
+    console.log('Auction state change:', data);
     updateUIForStateChange(data.prevState, data.newState, data.reason);
   });
+  
+  // Listen for auction status updates
+  socket.on('auction-status', (data) => {
+    console.log('Auction status update:', data);
+    updateAuctionStatus(data);
+  });
+  
+  // Listen for auction notifications
+  socket.on('auction-notification', (data) => {
+    console.log('Auction notification:', data);
+    showNotification(data.title, data.message, data.type);
+  });
+  
+  // Listen for waiting countdown
+  socket.on('waiting-countdown', (data) => {
+    console.log('Waiting countdown:', data);
+    if (auctionStatusMessage) {
+      auctionStatusMessage.textContent = `Selecting next player in ${data.seconds} seconds...`;
+    }
+  });
+  
+  // Function to fetch current auction status
+  function fetchAuctionStatus() {
+    console.log('Fetching auction status...');
+    fetch('/admin/auction/status')
+      .then(response => response.json())
+      .then(data => {
+        console.log('Status received:', data);
+        updateAuctionStatus(data);
+      })
+      .catch(error => {
+        console.error('Error fetching auction status:', error);
+      });
+  }
+  
+  // Function to update UI based on auction status
+  function updateAuctionStatus(data) {
+    const status = data.status || (data.isPaused ? 'paused' : (data.isRunning ? 'running' : 'not_running'));
+    
+    if (status === 'running' || data.isRunning) {
+      startAuctionBtn.disabled = true;
+      pauseAuctionBtn.disabled = false;
+      endAuctionBtn.disabled = false;
+      
+      if (auctionStatusText) {
+        auctionStatusText.textContent = 'Running';
+        auctionStatusText.className = 'text-success';
+      }
+    } else if (status === 'paused' || data.isPaused) {
+      startAuctionBtn.disabled = false;
+      pauseAuctionBtn.disabled = true;
+      endAuctionBtn.disabled = false;
+      
+      if (auctionStatusText) {
+        auctionStatusText.textContent = 'Paused';
+        auctionStatusText.className = 'text-warning';
+      }
+    } else {
+      startAuctionBtn.disabled = false;
+      pauseAuctionBtn.disabled = true;
+      endAuctionBtn.disabled = true;
+      
+      if (auctionStatusText) {
+        auctionStatusText.textContent = status === 'ended' ? 'Ended' : 'Not Running';
+        auctionStatusText.className = 'text-secondary';
+      }
+    }
+    
+    // Update status message if available
+    if (auctionStatusMessage && data.message) {
+      auctionStatusMessage.textContent = data.message;
+    }
+    
+    // Update player count if available
+    if (auctionPlayerCount && data.availablePlayerCount !== undefined) {
+      auctionPlayerCount.textContent = `${data.availablePlayerCount} Players Available`;
+    }
+    
+    // Update current player card if available
+    const currentPlayerCard = document.getElementById('current-player-card');
+    if (currentPlayerCard) {
+      if (data.currentPlayer) {
+        currentPlayerCard.classList.remove('d-none');
+        
+        const playerNameElem = document.getElementById('current-player-name');
+        const playerRoleElem = document.getElementById('current-player-role');
+        const playerBasePriceElem = document.getElementById('current-player-base-price');
+        
+        if (playerNameElem) playerNameElem.textContent = data.currentPlayer.name;
+        if (playerRoleElem) playerRoleElem.textContent = data.currentPlayer.role;
+        if (playerBasePriceElem) {
+          const basePrice = data.currentPlayer.basePrice || data.currentPlayer.base_price || 0;
+          playerBasePriceElem.textContent = new Intl.NumberFormat('en-IN').format(basePrice);
+        }
+        
+        // Update timer elements if available
+        const timeRemainingElem = document.getElementById('time-remaining');
+        const timeProgressElem = document.getElementById('time-progress');
+        
+        if (timeRemainingElem && data.timeRemaining !== undefined) {
+          timeRemainingElem.textContent = `${data.timeRemaining}s`;
+        }
+        
+        if (timeProgressElem && data.timeRemaining !== undefined) {
+          const progressPercent = (data.timeRemaining / 60) * 100;
+          timeProgressElem.style.width = `${progressPercent}%`;
+          
+          // Update progress bar color based on time remaining
+          if (progressPercent > 60) {
+            timeProgressElem.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+          } else if (progressPercent > 30) {
+            timeProgressElem.className = 'progress-bar progress-bar-striped progress-bar-animated bg-warning';
+          } else {
+            timeProgressElem.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
+          }
+        }
+      } else {
+        currentPlayerCard.classList.add('d-none');
+      }
+    }
+  }
   
   // Function to handle pausing the auction
   function pauseAuction(reason = '') {
@@ -297,5 +437,59 @@ document.addEventListener('DOMContentLoaded', function() {
   
   if (endAuctionBtn) {
     endAuctionBtn.addEventListener('click', endAuction);
+  }
+  
+  // Function to handle starting the auction
+  function startAuction() {
+    // Set button loading state
+    startAuctionBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+    startAuctionBtn.disabled = true;
+    
+    // Make API request to start the auction
+    fetch('/admin/auction/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.json().then(data => {
+          throw new Error(data.error || data.message || 'Failed to start auction');
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      // Show success notification
+      showNotification('Auction Started', data.message || 'Auction has been started successfully', 'success');
+      
+      // Reset button
+      startAuctionBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i>Start Auction';
+      startAuctionBtn.disabled = true;
+      
+      // Enable pause and end buttons
+      pauseAuctionBtn.disabled = false;
+      endAuctionBtn.disabled = false;
+      
+      // Update status text
+      if (auctionStatusText) {
+        auctionStatusText.textContent = 'Running';
+        auctionStatusText.className = 'text-success';
+      }
+    })
+    .catch(error => {
+      // Show error notification
+      showNotification('Error', error.message, 'danger');
+      
+      // Reset button
+      startAuctionBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i>Start Auction';
+      startAuctionBtn.disabled = false;
+    });
+  }
+  
+  // Add event listener for start auction button
+  if (startAuctionBtn) {
+    startAuctionBtn.addEventListener('click', startAuction);
   }
 }); 

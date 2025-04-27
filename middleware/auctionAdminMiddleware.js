@@ -24,7 +24,7 @@ function logAdminAction(action) {
  */
 exports.isAuctionAdmin = (req, res, next) => {
   // Check if user is logged in as admin
-  if (!req.session || !req.session.admin || !req.session.admin.id) {
+  if (!req.session || !req.session.isAdmin) {
     return res.status(403).json({ 
       error: 'Unauthorized: Admin privileges required',
       status: 'error'
@@ -33,8 +33,8 @@ exports.isAuctionAdmin = (req, res, next) => {
   
   // Add admin user info to request for logging
   req.adminUser = {
-    id: req.session.admin.id,
-    username: req.session.admin.username || 'admin'
+    id: req.session.adminId || 'admin',
+    username: req.session.adminUsername || 'admin'
   };
   
   next();
@@ -44,14 +44,33 @@ exports.isAuctionAdmin = (req, res, next) => {
  * Validate pause auction request
  */
 exports.validatePauseAuction = (req, res, next) => {
-  // Check if auction is running
-  if (!auctionState.isRunning || auctionState.isPaused) {
+  // Debug log to check auction state
+  console.log('Validating pause request, current auction state:', {
+    isRunning: auctionState.isRunning,
+    isPaused: auctionState.isPaused
+  });
+  
+  // Check if auction is running and not already paused
+  if (auctionState.isPaused) {
     return res.status(400).json({
-      error: auctionState.isPaused 
-        ? 'Auction is already paused'
-        : 'No auction is currently running',
-      status: auctionState.isPaused ? 'paused' : 'not_running'
+      error: 'Auction is already paused',
+      status: 'paused'
     });
+  }
+  
+  if (!auctionState.isRunning) {
+    return res.status(400).json({
+      error: 'No auction is currently running',
+      status: 'not_running'
+    });
+  }
+  
+  // Ensure adminUser exists
+  if (!req.adminUser) {
+    req.adminUser = {
+      id: 'unknown',
+      username: req.session.adminUsername || 'admin'
+    };
   }
   
   // Log action
@@ -77,12 +96,26 @@ exports.validatePauseAuction = (req, res, next) => {
  * Validate end auction request
  */
 exports.validateEndAuction = (req, res, next) => {
-  // Check if auction exists to end
+  // Debug log to check auction state
+  console.log('Validating end auction request, current auction state:', {
+    isRunning: auctionState.isRunning,
+    isPaused: auctionState.isPaused
+  });
+  
+  // Check if auction exists to end (either running or paused)
   if (!auctionState.isRunning && !auctionState.isPaused) {
     return res.status(400).json({
       error: 'No auction is currently running or paused',
       status: 'not_running'
     });
+  }
+  
+  // Ensure adminUser exists
+  if (!req.adminUser) {
+    req.adminUser = {
+      id: 'unknown',
+      username: req.session.adminUsername || 'admin'
+    };
   }
   
   // Log action
@@ -110,8 +143,18 @@ exports.validateEndAuction = (req, res, next) => {
  */
 exports.notifyAdminAction = (actionType, message) => {
   return (req, res, next) => {
+    // Debug log to check auction state
+    console.log(`Admin action: ${actionType}, current auction state:`, {
+      isRunning: auctionState.isRunning,
+      isPaused: auctionState.isPaused,
+      isWaiting: auctionState.isWaiting
+    });
+    
     // Get IO instance
     const io = getIO();
+    
+    // Get admin username from session or request
+    const adminUsername = req.adminUser?.username || req.session?.adminUsername || 'admin';
     
     if (io) {
       // Emit to all clients
@@ -119,7 +162,7 @@ exports.notifyAdminAction = (actionType, message) => {
         action: actionType,
         message: message || `Admin action: ${actionType}`,
         timestamp: new Date().toISOString(),
-        admin: req.adminUser ? req.adminUser.username : 'admin'
+        admin: adminUsername
       });
     }
     
