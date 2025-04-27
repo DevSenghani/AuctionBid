@@ -1,3 +1,64 @@
+/**
+ * Auction Front-end JavaScript
+ * Contains utilities and functions for the auction interface
+ */
+
+// Default profile images based on player role
+const DEFAULT_PLAYER_IMAGES = {
+  'Batsman': '/images/default-batsman.png',
+  'Bowler': '/images/default-bowler.png',
+  'All-Rounder': '/images/default-all-rounder.png',
+  'All-rounder': '/images/default-all-rounder.png',
+  'Wicket-Keeper': '/images/default-wicket-keeper.png',
+  'Wicket-keeper': '/images/default-wicket-keeper.png',
+  'default': '/images/default-player.png'
+};
+
+// Get default player image based on role
+function getDefaultPlayerImage(role) {
+  return DEFAULT_PLAYER_IMAGES[role] || DEFAULT_PLAYER_IMAGES.default;
+}
+
+// Format currency (INR)
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+}
+
+// Standardize player role display
+function standardizeRoleDisplay(role) {
+  if (!role) return '';
+  
+  // Capitalize first letter of each word
+  role = role.toLowerCase();
+  
+  // Handle specific roles for consistent display
+  if (role === 'all-rounder' || role === 'all rounder') {
+    return 'All-Rounder';
+  } else if (role === 'wicket-keeper' || role === 'wicket keeper') {
+    return 'Wicket-Keeper';
+  } else if (role === 'batsman') {
+    return 'Batsman';
+  } else if (role === 'bowler') {
+    return 'Bowler';
+  }
+  
+  // Default: capitalize each word
+  return role.replace(/\b\w/g, char => char.toUpperCase());
+}
+
+// Export functions for use in other scripts
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    getDefaultPlayerImage,
+    formatCurrency,
+    standardizeRoleDisplay
+  };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Root container in your HTML page must have id="auction-page"
   const pageContainer = document.getElementById('auction-page');

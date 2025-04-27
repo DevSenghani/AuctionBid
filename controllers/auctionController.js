@@ -869,11 +869,38 @@ const fetchNextPlayer = async () => {
 
 const finalizePlayerSale = async (isTimeout = true) => {
   try {
-    if (!auctionState.currentPlayer) return;
+    if (!auctionState.currentPlayer) {
+      console.log('No current player found in auction state, cannot finalize sale');
+      return;
+    }
     
     // Make sure we're using the correct ID property (could be id, _id, or both)
     const playerId = auctionState.currentPlayer.id || auctionState.currentPlayer._id;
     const playerName = auctionState.currentPlayer.name;
+    
+    // First validate player exists in the database
+    const player = await playerModel.getPlayerById(playerId);
+    if (!player) {
+      console.error(`Error finalizing player sale: Player with ID ${playerId} not found in database`);
+      
+      // Still emit an auction status update to keep UI in sync
+      emitAuctionStatus({
+        isRunning: auctionState.isRunning,
+        isPaused: false,
+        isWaiting: true,
+        status: 'waiting',
+        error: `Player with ID ${playerId} not found in database`,
+        message: 'Error occurred. Moving to next player...'
+      });
+      
+      // Start waiting timer for next player
+      auctionState.isWaiting = true;
+      timerManager.startWaitingTimer(() => {
+        fetchNextPlayer();
+      });
+      
+      return;
+    }
     
     // Log the finalization reason
     console.log(`Finalizing auction for ${playerName} - ${isTimeout ? 'TIMER EXPIRED' : 'MANUAL FINALIZATION'}`);
@@ -883,8 +910,16 @@ const finalizePlayerSale = async (isTimeout = true) => {
     
     if (auctionState.highestBidder) {
       // Player sold
-      await playerModel.updatePlayerStatus(playerId, 'sold');
-      await playerModel.updatePlayerTeam(playerId, auctionState.highestBidder.id || auctionState.highestBidder._id);
+      try {
+        const updatedPlayer = await playerModel.updatePlayerStatus(playerId, 'sold');
+        if (!updatedPlayer) {
+          console.error(`Error updating status for player ID ${playerId}`);
+        }
+        
+        await playerModel.updatePlayerTeam(playerId, auctionState.highestBidder.id || auctionState.highestBidder._id);
+      } catch (statusError) {
+        console.error(`Error updating player status: ${statusError.message}`);
+      }
       
       // Update team budget
       const newBudget = auctionState.highestBidder.budget - auctionState.highestBid;
@@ -935,7 +970,14 @@ const finalizePlayerSale = async (isTimeout = true) => {
       
     } else {
       // Player unsold
-      await playerModel.updatePlayerStatus(playerId, 'unsold');
+      try {
+        const updatedPlayer = await playerModel.updatePlayerStatus(playerId, 'unsold');
+        if (!updatedPlayer) {
+          console.error(`Error updating status for player ID ${playerId} to unsold`);
+        }
+      } catch (statusError) {
+        console.error(`Error marking player as unsold: ${statusError.message}`);
+      }
       
       // Prepare result message
       const resultMessage = isTimeout 

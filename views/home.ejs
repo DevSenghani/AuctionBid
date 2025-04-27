@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cricket Auction System</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <style>
     .hero-section {
@@ -45,11 +46,15 @@
         <ul class="navbar-nav">
           <% if (typeof team !== 'undefined' && team) { %>
             <li class="nav-item">
-              <a class="btn btn-primary btn-sm" href="/team/dashboard">Team Profile</a>
+              <a class="btn btn-primary btn-sm" href="/team/dashboard">
+                <i class="fas fa-user-circle me-1"></i>Team Profile
+              </a>
             </li>
           <% } else { %>
             <li class="nav-item me-2">
-              <a class="btn btn-primary btn-sm" href="/team/login">Team Login</a>
+              <a class="btn btn-primary btn-sm" href="/team/login">
+                <i class="fas fa-users me-1"></i>Team Login
+              </a>
             </li>
             <li class="nav-item">
               <a class="btn btn-dark btn-sm" href="/admin/login">
@@ -92,7 +97,7 @@
                   <label for="team-select" class="form-label">Select Your Team</label>
                   <select id="team-select" name="team_id" class="form-select" required>
                     <option value="">Select a team</option>
-                    <% if (teams && teams.length > 0) { %>
+                    <% if (typeof teams !== 'undefined' && teams && teams.length > 0) { %>
                       <% teams.forEach(team => { %>
                         <option value="<%= team.id %>"><%= team.name %></option>
                       <% }) %>

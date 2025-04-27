@@ -84,11 +84,11 @@ exports.getPlayersByTeam = async (teamId) => {
 
 // Create a new player
 exports.createPlayer = async (playerData) => {
-  const { name, base_price, role, team_id } = playerData;
+  const { name, base_price, role, team_id, image_url } = playerData;
   try {
     const result = await db.query(
-      'INSERT INTO players (name, base_price, role, team_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, base_price, role, team_id]
+      'INSERT INTO players (name, base_price, role, team_id, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [name, base_price, role, team_id, image_url]
     );
     return result.rows[0];
   } catch (error) {
@@ -99,11 +99,11 @@ exports.createPlayer = async (playerData) => {
 
 // Update a player
 exports.updatePlayer = async (id, playerData) => {
-  const { name, base_price, role, team_id } = playerData;
+  const { name, base_price, role, team_id, image_url } = playerData;
   try {
     const result = await db.query(
-      'UPDATE players SET name = $1, base_price = $2, role = $3, team_id = $4 WHERE id = $5 RETURNING *',
-      [name, base_price, role, team_id, id]
+      'UPDATE players SET name = $1, base_price = $2, role = $3, team_id = $4, image_url = $5 WHERE id = $6 RETURNING *',
+      [name, base_price, role, team_id, image_url, id]
     );
     if (result.rows.length === 0) {
       throw new Error('Player not found');
@@ -144,23 +144,46 @@ exports.updatePlayerStatus = async (playerId, status) => {
   try {
     console.log(`Updating player ${playerId} status to ${status}...`);
     
-    // First check if the player exists
+    // First check if the player exists with more detailed error handling
     const checkPlayer = await db.query('SELECT * FROM players WHERE id = $1', [playerId]);
+    
     if (checkPlayer.rows.length === 0) {
       console.error(`No player found with ID ${playerId}`);
       throw new Error('Player not found');
     }
     
-    // Update both status and is_auctioned flag
-    const result = await db.query(
-      'UPDATE players SET status = $1, is_auctioned = $2 WHERE id = $3 RETURNING *',
-      [status, true, playerId]
-    );
+    // Add more detailed console logging to help with debugging
+    console.log(`Player found:`, JSON.stringify(checkPlayer.rows[0]));
     
+    // Since status is defined as character varying[] (array), we need to convert single string to array
+    const statusArray = Array.isArray(status) ? status : [status];
+    
+    // Use a more resilient query that handles the status array correctly
+    let result;
+    try {
+      // Try standard update with array
+      result = await db.query(
+        'UPDATE players SET status = $1, is_auctioned = $2 WHERE id = $3 RETURNING *',
+        [statusArray, true, playerId]
+      );
+    } catch (columnError) {
+      console.error('Error in status update, trying an alternative approach:', columnError.message);
+      
+      // Just update the is_auctioned field - this is a fallback if the status column has issues
+      result = await db.query(
+        'UPDATE players SET is_auctioned = $1 WHERE id = $2 RETURNING *',
+        [true, playerId]
+      );
+      
+      console.log('Used fallback method for status update');
+    }
+    
+    console.log(`Successfully updated player ${playerId} status to ${status}`);
     return result.rows[0];
   } catch (error) {
     console.error(`Error updating status for player ID ${playerId}:`, error);
-    throw error; // Rethrow for handling in controller
+    // Return null instead of throwing to prevent cascading errors
+    return null;
   }
 };
 

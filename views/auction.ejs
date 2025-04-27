@@ -175,19 +175,26 @@
                     </div>
                     <div class="card-body">
                       <div class="row mb-3">
-                        <div class="col-6">
-                          <div class="card bg-light">
-                            <div class="card-body p-2 text-center">
-                              <small class="text-muted">Base Price</small>
-                              <h5 id="player-base-price" class="mb-0">-</h5>
-                            </div>
-                          </div>
+                        <div class="col-md-4 text-center mb-3">
+                          <img id="player-image" src="/images/default-player.png" alt="Player Image" class="img-fluid rounded-circle" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #0d6efd;">
                         </div>
-                        <div class="col-6">
-                          <div class="card bg-light">
-                            <div class="card-body p-2 text-center">
-                              <small class="text-muted">Role</small>
-                              <h5 id="player-role" class="mb-0">-</h5>
+                        <div class="col-md-8">
+                          <div class="row">
+                            <div class="col-6">
+                              <div class="card bg-light">
+                                <div class="card-body p-2 text-center">
+                                  <small class="text-muted">Base Price</small>
+                                  <h5 id="player-base-price" class="mb-0">-</h5>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="col-6">
+                              <div class="card bg-light">
+                                <div class="card-body p-2 text-center">
+                                  <small class="text-muted">Role</small>
+                                  <h5 id="player-role" class="mb-0">-</h5>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -289,6 +296,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/auction.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // DOM Elements
@@ -906,6 +914,9 @@
         currentBidder.textContent = 'None';
         bidHistory.innerHTML = '<li class="list-group-item text-center">Loading bids...</li>';
         
+        // Set default player image
+        document.getElementById('player-image').src = '/images/default-player.png';
+        
         fetch(`/auction/player/${playerId}`)
           .then(response => {
             if (!response.ok) {
@@ -922,12 +933,31 @@
             playerRoleBadge.textContent = data.player.role;
             playerBasePrice.textContent = formatCurrency(data.player.base_price);
             
+            // Update player image if available
+            if (data.player.image_url) {
+              document.getElementById('player-image').src = data.player.image_url;
+            } else {
+              // Set role-based default image
+              const roleDefaults = {
+                'Batsman': '/images/default-batsman.png',
+                'Bowler': '/images/default-bowler.png',
+                'All-Rounder': '/images/default-all-rounder.png',
+                'All-rounder': '/images/default-all-rounder.png',
+                'Wicket-Keeper': '/images/default-wicket-keeper.png',
+                'Wicket-keeper': '/images/default-wicket-keeper.png'
+              };
+              const defaultImg = roleDefaults[data.player.role] || '/images/default-player.png';
+              document.getElementById('player-image').src = defaultImg;
+            }
+            
             // Set role badge color based on player role
             const roleColors = {
               'Batsman': 'bg-danger',
               'Bowler': 'bg-success',
               'All-rounder': 'bg-warning',
-              'Wicket-keeper': 'bg-info'
+              'All-Rounder': 'bg-warning',
+              'Wicket-keeper': 'bg-info',
+              'Wicket-Keeper': 'bg-info'
             };
             
             playerRoleBadge.className = 'badge badge-role ' + 

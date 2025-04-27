@@ -251,6 +251,111 @@ class TimerManager {
     // Default return the current waitingTimeRemaining
     return this.waitingTimeRemaining;
   }
+
+  // Get the current pause state
+  getPauseState() {
+    return {
+      waitingTimeRemaining: this.pausedWaitingTimeRemaining || 0,
+      bidTimeRemaining: this.pausedBidTimeRemaining || 0,
+      timestamp: Date.now()
+    };
+  }
+  
+  // Resume bid timer with previously stored time
+  resumeBidTimer(callback) {
+    try {
+      console.log('Resuming bid timer...');
+      
+      // Check if there's a paused time
+      if (this.pausedBidTimeRemaining === null) {
+        console.warn('No paused bid time found, using default value');
+        this.pausedBidTimeRemaining = 30; // Default to 30 seconds if no stored value
+      }
+      
+      // Set initial time from paused value
+      this.timeRemaining = this.pausedBidTimeRemaining;
+      this.bidStartTime = Date.now();
+      
+      // Clear the paused value
+      this.pausedBidTimeRemaining = null;
+      
+      // Start the timer
+      this.bidTimer = setInterval(() => {
+        this.timeRemaining--;
+        
+        // Emit remaining time to all clients
+        const io = require('../socket/auctionSocket').getIO();
+        if (io) {
+          io.to('auction').emit('bid-time-update', {
+            timeRemaining: this.timeRemaining,
+            timestamp: Date.now()
+          });
+        }
+        
+        // When timer reaches 0
+        if (this.timeRemaining <= 0) {
+          this.stopBidTimer();
+          if (callback) {
+            callback();
+          }
+        }
+      }, 1000);
+      
+      console.log('Bid timer resumed successfully with', this.timeRemaining, 'seconds remaining');
+    } catch (error) {
+      console.error('Error resuming bid timer:', error);
+      this.stopAllTimers();
+      throw new Error('Failed to resume bid timer: ' + error.message);
+    }
+  }
+  
+  // Resume waiting timer with previously stored time
+  resumeWaitingTimer(callback) {
+    try {
+      console.log('Resuming waiting timer...');
+      
+      // Check if there's a paused time
+      if (this.pausedWaitingTimeRemaining === null) {
+        console.warn('No paused waiting time found, using default value');
+        this.pausedWaitingTimeRemaining = 10; // Default to 10 seconds if no stored value
+      }
+      
+      // Set initial time from paused value
+      this.waitingTimeRemaining = this.pausedWaitingTimeRemaining;
+      this.waitingStartTime = Date.now();
+      
+      // Clear the paused value
+      this.pausedWaitingTimeRemaining = null;
+      
+      // Start the timer
+      this.waitingTimer = setInterval(() => {
+        this.waitingTimeRemaining--;
+        
+        // Emit remaining time to all clients
+        const io = require('../socket/auctionSocket').getIO();
+        if (io) {
+          io.to('auction').emit('waiting-time-update', {
+            timeRemaining: this.waitingTimeRemaining,
+            timestamp: Date.now()
+          });
+        }
+        
+        // When timer reaches 0
+        if (this.waitingTimeRemaining <= 0) {
+          this.stopWaitingTimer();
+          if (callback) {
+            callback();
+          }
+        }
+      }, 1000);
+      
+      console.log('Waiting timer resumed successfully with', this.waitingTimeRemaining, 'seconds remaining');
+    } catch (error) {
+      console.error('Error resuming waiting timer:', error);
+      this.stopAllTimers();
+      throw new Error('Failed to resume waiting timer: ' + error.message);
+    }
+  }
 }
 
 module.exports = TimerManager; 

@@ -69,6 +69,65 @@ exports.createPlayer = async (req, res) => {
   }
 };
 
+// Update an existing player
+exports.updatePlayer = async (req, res) => {
+  const playerId = parseInt(req.params.id);
+  try {
+    // First check if the player exists
+    const player = await playerModel.getPlayerById(playerId);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    
+    // Update the player with new data
+    const updatedPlayer = await playerModel.updatePlayer(playerId, req.body);
+    
+    res.status(200).json({ 
+      message: 'Player updated successfully',
+      player: updatedPlayer
+    });
+  } catch (error) {
+    console.error('Error updating player:', error);
+    res.status(500).json({ error: 'Failed to update player' });
+  }
+};
+
+// Upload player image
+exports.uploadPlayerImage = async (req, res) => {
+  const playerId = parseInt(req.params.id);
+  
+  try {
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file uploaded' });
+    }
+    
+    // Check if player exists
+    const player = await playerModel.getPlayerById(playerId);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    
+    // Generate URL for the uploaded image
+    const imagePath = `/uploads/players/${req.file.filename}`;
+    
+    // Update player with the new image URL
+    const updatedPlayer = await playerModel.updatePlayer(playerId, {
+      ...player,
+      image_url: imagePath
+    });
+    
+    res.status(200).json({
+      message: 'Player image uploaded successfully',
+      player: updatedPlayer,
+      image_url: imagePath
+    });
+  } catch (error) {
+    console.error('Error uploading player image:', error);
+    res.status(500).json({ error: 'Failed to upload player image' });
+  }
+};
+
 // Delete a team
 exports.deleteTeam = async (req, res) => {
   try {

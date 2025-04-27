@@ -142,6 +142,51 @@ exports.validateEndAuction = (req, res, next) => {
 };
 
 /**
+ * Validate resume auction request
+ */
+exports.validateResumeAuction = (req, res, next) => {
+  // Debug log to check auction state
+  console.log('Validating resume request, current auction state:', {
+    isRunning: auctionState.isRunning,
+    isPaused: auctionState.isPaused
+  });
+  
+  // Check if auction is paused
+  if (!auctionState.isPaused) {
+    return res.status(400).json({
+      success: false,
+      error: 'Auction is not paused. Cannot resume.',
+      status: 'not_paused'
+    });
+  }
+  
+  // Ensure adminUser exists
+  if (!req.adminUser) {
+    req.adminUser = {
+      id: 'unknown',
+      username: req.session.adminUsername || 'admin'
+    };
+  }
+  
+  // Log action
+  logAdminAction({
+    type: 'resume_auction',
+    message: `Auction resumed${req.body.reason ? ': ' + req.body.reason : ''}`,
+    user: req.adminUser,
+    details: {
+      reason: req.body.reason || '',
+      auctionStatus: {
+        isRunning: auctionState.isRunning,
+        isPaused: auctionState.isPaused,
+        currentRound: auctionState.currentRound
+      }
+    }
+  });
+  
+  next();
+};
+
+/**
  * Validate start auction request
  */
 exports.validateStartAuction = (req, res, next) => {

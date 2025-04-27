@@ -38,21 +38,56 @@
       padding: 0.4em 0.6em;
     }
     
-    /* Role colors */
+    /* Role colors and styles - improved */
     .role-batsman {
-      color: #dc3545;
+      color: #e74c3c;
+      font-weight: 600;
     }
     
     .role-bowler {
-      color: #28a745;
+      color: #27ae60;
+      font-weight: 600;
     }
     
     .role-all-rounder {
-      color: #fd7e14;
+      color: #f39c12;
+      font-weight: 600;
     }
     
     .role-wicket-keeper {
-      color: #17a2b8;
+      color: #3498db;
+      font-weight: 600;
+    }
+    
+    .role-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      margin-right: 6px;
+      font-size: 12px;
+    }
+    
+    .role-icon-batsman {
+      background-color: rgba(231, 76, 60, 0.15);
+      color: #e74c3c;
+    }
+    
+    .role-icon-bowler {
+      background-color: rgba(39, 174, 96, 0.15);
+      color: #27ae60;
+    }
+    
+    .role-icon-all-rounder {
+      background-color: rgba(243, 156, 18, 0.15);
+      color: #f39c12;
+    }
+    
+    .role-icon-wicket-keeper {
+      background-color: rgba(52, 152, 219, 0.15);
+      color: #3498db;
     }
     
     /* Status badges */
@@ -155,13 +190,18 @@
                   <option value="">Select a role</option>
                   <option value="Batsman">Batsman</option>
                   <option value="Bowler">Bowler</option>
-                  <option value="All-rounder">All-rounder</option>
-                  <option value="Wicket-keeper">Wicket-keeper</option>
+                  <option value="All-Rounder">All-Rounder</option>
+                  <option value="Wicket-Keeper">Wicket-Keeper</option>
                 </select>
               </div>
               <div class="mb-3">
                 <label for="player-base-price" class="form-label">Base Price</label>
                 <input type="number" class="form-control" id="player-base-price" value="200000" required>
+              </div>
+              <div class="mb-3">
+                <label for="player-image-url" class="form-label">Player Image URL</label>
+                <input type="url" class="form-control" id="player-image-url" placeholder="https://example.com/player-image.jpg">
+                <small class="form-text text-muted">Link to player's profile image (optional)</small>
               </div>
               <div class="mb-3">
                 <label for="player-team" class="form-label">Team (Optional)</label>
@@ -230,7 +270,8 @@
                     <th>Name</th>
                     <th>Role</th>
                     <th>Base Price</th>
-                    <th>Status</th>
+                    <th>Team</th>
+                    <th>Sold Price</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -240,33 +281,51 @@
                       <tr class="player-row" data-status="<%= player.team_id ? 'sold' : (player.status === 'unsold' ? 'unsold' : 'available') %>">
                         <td><%= player.name %></td>
                         <td>
-                          <% const roleClass = player.role === 'Batsman' ? 'role-batsman' : 
-                                            player.role === 'Bowler' ? 'role-bowler' : 
-                                            player.role === 'All-rounder' ? 'role-all-rounder' : 
-                                            player.role === 'Wicket-keeper' ? 'role-wicket-keeper' : ''; %>
+                          <% 
+                            let roleClass = '';
+                            let roleIconClass = '';
+                            let roleIcon = '';
+                            let displayRole = player.role;
+                            
+                            // Standardize role display for consistent formatting
+                            if (player.role === 'all-rounder' || player.role === 'All-rounder') {
+                              displayRole = 'All-Rounder';
+                            } else if (player.role === 'wicket-keeper' || player.role === 'Wicket-keeper') {
+                              displayRole = 'Wicket-Keeper';
+                            }
+                            
+                            if (player.role === 'Batsman') {
+                              roleClass = 'role-batsman';
+                              roleIconClass = 'role-icon-batsman';
+                              roleIcon = 'fas fa-baseball-ball';
+                            } else if (player.role === 'Bowler') {
+                              roleClass = 'role-bowler';
+                              roleIconClass = 'role-icon-bowler';
+                              roleIcon = 'fas fa-bowling-ball';
+                            } else if (player.role === 'All-rounder' || player.role === 'All-Rounder' || player.role === 'all-rounder') {
+                              roleClass = 'role-all-rounder';
+                              roleIconClass = 'role-icon-all-rounder';
+                              roleIcon = 'fas fa-running';
+                              displayRole = 'All-Rounder';
+                            } else if (player.role === 'Wicket-keeper' || player.role === 'Wicket-Keeper' || player.role === 'wicket-keeper') {
+                              roleClass = 'role-wicket-keeper';
+                              roleIconClass = 'role-icon-wicket-keeper';
+                              roleIcon = 'fas fa-hands';
+                              displayRole = 'Wicket-Keeper';
+                            } else {
+                              roleIcon = 'fas fa-user';
+                            }
+                          %>
                           <span class="<%= roleClass %>">
-                            <i class="<%= player.role === 'Batsman' ? 'fas fa-baseball-ball' : 
-                                      player.role === 'Bowler' ? 'fas fa-bowling-ball' : 
-                                      player.role === 'All-rounder' ? 'fas fa-running' : 
-                                      player.role === 'Wicket-keeper' ? 'fas fa-hands' : 'fas fa-user' %> me-1"></i>
-                            <%= player.role %>
+                            <span class="role-icon <%= roleIconClass %>">
+                              <i class="<%= roleIcon %>"></i>
+                            </span>
+                            <%= displayRole %>
                           </span>
                         </td>
                         <td><%= typeof player.base_price !== 'undefined' ? player.base_price.toLocaleString() : '0' %></td>
-                        <td>
-                          <% if (player.team_id) { %>
-                            <span class="badge bg-success">
-                              <i class="fas fa-check-circle me-1"></i>Sold to <%= player.team_name || 'Unknown Team' %>
-                              <% if (player.sold_price) { %>
-                                for ₹<%= player.sold_price.toLocaleString() %>
-                              <% } %>
-                            </span>
-                          <% } else if (player.status === 'unsold') { %>
-                            <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Unsold</span>
-                          <% } else { %>
-                            <span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Available</span>
-                          <% } %>
-                        </td>
+                        <td><%= player.team ? player.team.name : 'Unsold' %></td>
+                        <td><%= player.sold_price ? player.sold_price.toLocaleString() : '0' %></td>
                         <td>
                           <% if (player.team_id) { %>
                             <button class="btn btn-sm btn-warning reset-player-btn" data-player-id="<%= player.id %>">Reset</button>
@@ -276,6 +335,13 @@
                               <i class="fas fa-gavel me-1"></i>Start Auction
                             </button>
                           <% } %>
+                          <button class="btn btn-sm btn-info edit-player-btn" data-player-id="<%= player.id %>" 
+                            data-player-name="<%= player.name %>" 
+                            data-player-role="<%= player.role %>" 
+                            data-player-base-price="<%= player.base_price %>"
+                            data-player-image-url="<%= player.image_url || '' %>">
+                            <i class="fas fa-edit me-1"></i>Edit
+                          </button>
                           <button class="btn btn-sm btn-danger delete-player-btn" data-player-id="<%= player.id %>">Delete</button>
                         </td>
                       </tr>
@@ -427,6 +493,60 @@
     </div>
   </div>
 
+  <!-- Modal for editing player -->
+  <div class="modal fade" id="editPlayerModal" tabindex="-1" aria-labelledby="editPlayerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editPlayerModalLabel">Edit Player</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-player-form">
+            <input type="hidden" id="edit-player-id">
+            <div class="mb-3">
+              <label for="edit-player-name" class="form-label">Player Name</label>
+              <input type="text" class="form-control" id="edit-player-name" required>
+            </div>
+            <div class="mb-3">
+              <label for="edit-player-role" class="form-label">Role</label>
+              <select class="form-select" id="edit-player-role" required>
+                <option value="">Select a role</option>
+                <option value="Batsman">Batsman</option>
+                <option value="Bowler">Bowler</option>
+                <option value="All-Rounder">All-Rounder</option>
+                <option value="Wicket-Keeper">Wicket-Keeper</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="edit-player-base-price" class="form-label">Base Price</label>
+              <input type="number" class="form-control" id="edit-player-base-price" required>
+            </div>
+            <div class="mb-3">
+              <label for="edit-player-image-url" class="form-label">Player Image URL</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="edit-player-image-url" placeholder="https://example.com/player-image.jpg">
+                <button class="btn btn-outline-secondary" type="button" id="upload-player-image-btn">Upload</button>
+              </div>
+              <input type="file" id="player-image-upload" class="d-none" accept="image/*">
+              <small class="form-text text-muted">Enter URL or upload an image</small>
+            </div>
+            <div class="mb-3" id="player-image-preview-container" style="display: none;">
+              <label class="form-label">Image Preview</label>
+              <div class="text-center">
+                <img id="player-image-preview" src="" alt="Player image preview" class="img-thumbnail" style="max-height: 150px;">
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-edit-btn">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/js/admin-auction-controls.js"></script>
   <script>
@@ -448,7 +568,8 @@
         const playerData = {
           name: document.getElementById('player-name').value,
           role: document.getElementById('player-role').value,
-          base_price: parseInt(document.getElementById('player-base-price').value)
+          base_price: parseInt(document.getElementById('player-base-price').value),
+          image_url: document.getElementById('player-image-url').value || null
         };
         
         // Add team_id and sold_price if a team is selected
@@ -627,6 +748,185 @@
         
         // Reload the page to refresh the player list
         window.location.reload();
+      });
+
+      // Function to standardize role display across the application
+      function standardizeRoles() {
+        // Find all role text nodes in the table and standardize them
+        document.querySelectorAll('.role-all-rounder, .role-wicket-keeper').forEach(elem => {
+          const roleText = elem.textContent.trim();
+          if (roleText === 'All-rounder' || roleText === 'all-rounder') {
+            // Update only the text node, not the icon
+            elem.childNodes.forEach(node => {
+              if (node.nodeType === Node.TEXT_NODE) {
+                elem.replaceChild(document.createTextNode('All-Rounder'), node);
+              }
+            });
+          } else if (roleText === 'Wicket-keeper' || roleText === 'wicket-keeper') {
+            // Update only the text node, not the icon
+            elem.childNodes.forEach(node => {
+              if (node.nodeType === Node.TEXT_NODE) {
+                elem.replaceChild(document.createTextNode('Wicket-Keeper'), node);
+              }
+            });
+          }
+        });
+      }
+      
+      // Call standardizeRoles function after page loads
+      standardizeRoles();
+
+      // Socket connection and event handling
+      const socket = io();
+
+      // Update auction status in real-time
+      socket.on('auctionUpdate', (data) => {
+        document.getElementById('auction-status').textContent = data.status;
+        document.getElementById('current-player').textContent = data.currentPlayer || 'None';
+        document.getElementById('current-bid').textContent = data.currentBid ? `₹${data.currentBid}` : 'No bids';
+        document.getElementById('highest-bidder').textContent = data.highestBidder || 'None';
+      });
+
+      // Handle edit player button click
+      document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('edit-player-btn') || event.target.closest('.edit-player-btn')) {
+          const btn = event.target.classList.contains('edit-player-btn') ? event.target : event.target.closest('.edit-player-btn');
+          const playerId = btn.getAttribute('data-player-id');
+          const playerName = btn.getAttribute('data-player-name');
+          const playerRole = btn.getAttribute('data-player-role');
+          const playerBasePrice = btn.getAttribute('data-player-base-price');
+          const playerImageUrl = btn.getAttribute('data-player-image-url') || '';
+          
+          // Populate modal fields
+          document.getElementById('edit-player-id').value = playerId;
+          document.getElementById('edit-player-name').value = playerName;
+          document.getElementById('edit-player-role').value = playerRole;
+          document.getElementById('edit-player-base-price').value = playerBasePrice;
+          document.getElementById('edit-player-image-url').value = playerImageUrl;
+          
+          // Show image preview if image URL exists
+          if (playerImageUrl) {
+            document.getElementById('player-image-preview').src = playerImageUrl;
+            document.getElementById('player-image-preview-container').style.display = 'block';
+          } else {
+            document.getElementById('player-image-preview-container').style.display = 'none';
+          }
+          
+          // Show the modal
+          const editPlayerModal = new bootstrap.Modal(document.getElementById('editPlayerModal'));
+          editPlayerModal.show();
+        }
+      });
+      
+      // Image upload button click
+      document.getElementById('upload-player-image-btn').addEventListener('click', function() {
+        document.getElementById('player-image-upload').click();
+      });
+      
+      // Handle image selection
+      document.getElementById('player-image-upload').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+          const playerId = document.getElementById('edit-player-id').value;
+          
+          // Create form data for file upload
+          const formData = new FormData();
+          formData.append('player_image', e.target.files[0]);
+          
+          // Show loading state
+          const uploadButton = document.getElementById('upload-player-image-btn');
+          const originalText = uploadButton.innerHTML;
+          uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+          uploadButton.disabled = true;
+          
+          // Upload the image
+          fetch(`/admin/players/${playerId}/image`, {
+            method: 'POST',
+            body: formData
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Failed to upload image');
+            }
+            return response.json();
+          })
+          .then(data => {
+            // Update the image URL input with the new URL
+            document.getElementById('edit-player-image-url').value = data.image_url;
+            
+            // Show preview
+            document.getElementById('player-image-preview').src = data.image_url;
+            document.getElementById('player-image-preview-container').style.display = 'block';
+            
+            // Reset upload button
+            uploadButton.innerHTML = originalText;
+            uploadButton.disabled = false;
+          })
+          .catch(error => {
+            console.error('Error uploading image:', error);
+            alert('Failed to upload image. Please try again.');
+            
+            // Reset upload button
+            uploadButton.innerHTML = originalText;
+            uploadButton.disabled = false;
+          });
+        }
+      });
+      
+      // Update preview when URL changes
+      document.getElementById('edit-player-image-url').addEventListener('input', function() {
+        const imageUrl = this.value.trim();
+        if (imageUrl) {
+          document.getElementById('player-image-preview').src = imageUrl;
+          document.getElementById('player-image-preview-container').style.display = 'block';
+        } else {
+          document.getElementById('player-image-preview-container').style.display = 'none';
+        }
+      });
+
+      // Handle save changes button click
+      document.getElementById('confirm-edit-btn').addEventListener('click', function() {
+        const playerId = document.getElementById('edit-player-id').value;
+        const playerName = document.getElementById('edit-player-name').value;
+        const playerRole = document.getElementById('edit-player-role').value;
+        const playerBasePrice = document.getElementById('edit-player-base-price').value;
+        const playerImageUrl = document.getElementById('edit-player-image-url').value;
+        
+        // Validate form
+        if (!playerName || !playerRole || !playerBasePrice) {
+          alert('Please fill all required fields');
+          return;
+        }
+        
+        // Send update request
+        fetch(`/admin/players/${playerId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: playerName,
+            role: playerRole,
+            base_price: playerBasePrice,
+            image_url: playerImageUrl || null
+          })
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to update player');
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Close modal
+          bootstrap.Modal.getInstance(document.getElementById('editPlayerModal')).hide();
+          
+          // Refresh page to see updates
+          window.location.reload();
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Failed to update player. Please try again.');
+        });
       });
     });
   </script>

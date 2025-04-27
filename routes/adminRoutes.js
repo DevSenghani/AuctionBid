@@ -4,8 +4,9 @@ const adminController = require('../controllers/adminController');
 const adminAuthController = require('../controllers/adminAuthController');
 const auctionController = require('../controllers/auctionController');
 const auctionAdminController = require('../controllers/auctionAdminController');
-const { isAuctionAdmin, validatePauseAuction, validateEndAuction, validateStartAuction } = require('../middleware/auctionAdminMiddleware');
+const { isAuctionAdmin, validatePauseAuction, validateEndAuction, validateStartAuction, validateResumeAuction } = require('../middleware/auctionAdminMiddleware');
 const AuctionResult = require('../models/auctionResult');
+const { uploadPlayerImage } = require('../utils/uploadUtils');
 
 // Admin authentication routes
 router.get('/login', adminAuthController.showLoginPage);
@@ -22,7 +23,15 @@ router.post('/teams/:id/password', adminAuthController.isAuthenticated, adminCon
 
 // Player management (protected)
 router.post('/players', adminAuthController.isAuthenticated, adminController.createPlayer);
+router.put('/players/:id', adminAuthController.isAuthenticated, adminController.updatePlayer);
 router.delete('/players/:id', adminAuthController.isAuthenticated, adminController.deletePlayer);
+
+// Player image upload
+router.post('/players/:id/image', 
+  adminAuthController.isAuthenticated, 
+  uploadPlayerImage.single('player_image'), 
+  adminController.uploadPlayerImage
+);
 
 // Auction management (protected)
 router.post('/players/:id/reset', adminAuthController.isAuthenticated, adminController.resetPlayerAuction);
@@ -43,6 +52,14 @@ router.post('/auction/pause',
   isAuctionAdmin, 
   validatePauseAuction, 
   auctionAdminController.pauseAuction
+);
+
+// Add resume auction route with validation
+router.post('/auction/resume', 
+  adminAuthController.isAuthenticated, 
+  isAuctionAdmin, 
+  validateResumeAuction,
+  auctionAdminController.resumeAuction
 );
 
 router.post('/auction/end', 
