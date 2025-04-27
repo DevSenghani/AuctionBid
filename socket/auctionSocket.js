@@ -78,6 +78,18 @@ const emitAuctionStatus = (statusObj) => {
       normalizedStatus.currentPlayer = statusObj.currentPlayer;
     }
     
+    // Add timestamp to help clients calculate elapsed time
+    normalizedStatus.timestamp = Date.now();
+    
+    // Make sure we include correct timer information
+    if (normalizedStatus.isWaiting) {
+      normalizedStatus.timerType = 'waiting';
+      // We'll rely on getRemainingWaitingTime from the timerManager
+    } else if (normalizedStatus.isRunning && !normalizedStatus.isPaused) {
+      normalizedStatus.timerType = 'bidding';
+      // We'll rely on getRemainingBidTime from the timerManager
+    }
+    
     if (io) {
       io.to('auction').emit('auction-status', normalizedStatus);
     } else {
@@ -123,21 +135,34 @@ const emitAuctionResult = (result) => {
 // Emit timer updates to all connected clients
 const emitTimerUpdate = (timeRemaining, isPaused = false) => {
   if (!io) return;
-  io.to('auction').emit('timer-update', { 
-    timeRemaining,
-    isPaused
-  });
+  
+  // Create a timer update object
+  const timerData = {
+    timeRemaining: timeRemaining,
+    isPaused: isPaused,
+    timestamp: Date.now() // Add timestamp for calculating elapsed time on client
+  };
+  
+  // Emit to all clients in the auction room
+  io.to('auction').emit('timer-update', timerData);
+  
+  // Log timer update (uncomment for debugging)
+  // console.log('Timer update emitted:', timerData);
 };
 
 // Emit waiting countdown updates to all connected clients
-const emitWaitingCountdown = (timeRemaining, isPaused = false) => {
+const emitWaitingCountdown = (seconds, isPaused = false) => {
   if (!io) return;
-  // Include both timeRemaining and seconds properties for backward compatibility
-  io.to('auction').emit('waiting-countdown', { 
-    timeRemaining: timeRemaining,
-    seconds: timeRemaining,
-    isPaused
-  });
+  
+  // Create a countdown update object
+  const countdownData = {
+    seconds: seconds,
+    isPaused: isPaused,
+    timestamp: Date.now() // Add timestamp for calculating elapsed time on client
+  };
+  
+  // Emit to all clients in the auction room
+  io.to('auction').emit('waiting-countdown', countdownData);
 };
 
 // Send specific message to a team

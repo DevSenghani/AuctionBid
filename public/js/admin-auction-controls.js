@@ -449,8 +449,10 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/admin/auction/start', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      credentials: 'same-origin' // Include cookies for session
     })
     .then(response => {
       if (!response.ok) {
@@ -479,8 +481,10 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     })
     .catch(error => {
+      console.error('Error starting auction:', error);
+      
       // Show error notification
-      showNotification('Error', error.message, 'danger');
+      showNotification('Error', error.message || 'Failed to start auction', 'danger');
       
       // Reset button
       startAuctionBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i>Start Auction';

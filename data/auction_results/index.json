@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1745747599652",
+    "endTime": "2025-04-27T09:53:19.650Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-04-27T09:53:19.652Z"
+  },
+  {
+    "id": "1745747932394",
+    "endTime": "2025-04-27T09:58:52.392Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-04-27T09:58:52.394Z"
+  }
+]

@@ -4,7 +4,7 @@ const adminController = require('../controllers/adminController');
 const adminAuthController = require('../controllers/adminAuthController');
 const auctionController = require('../controllers/auctionController');
 const auctionAdminController = require('../controllers/auctionAdminController');
-const { isAuctionAdmin, validatePauseAuction, validateEndAuction } = require('../middleware/auctionAdminMiddleware');
+const { isAuctionAdmin, validatePauseAuction, validateEndAuction, validateStartAuction } = require('../middleware/auctionAdminMiddleware');
 const AuctionResult = require('../models/auctionResult');
 
 // Admin authentication routes
@@ -30,7 +30,12 @@ router.post('/players/:id/assign', adminAuthController.isAuthenticated, adminCon
 
 // Auction control routes (protected)
 router.get('/auction/status', adminAuthController.isAuthenticated, auctionController.getAuctionStatus);
-router.post('/auction/start', adminAuthController.isAuthenticated, auctionController.startAuction);
+router.post('/auction/start', 
+  adminAuthController.isAuthenticated, 
+  isAuctionAdmin, 
+  validateStartAuction, 
+  auctionAdminController.startAuction
+);
 
 // Enhanced auction admin routes with new middleware
 router.post('/auction/pause', 

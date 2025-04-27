@@ -238,23 +238,52 @@ exports.startAuction = async (req, res) => {
   try {
     console.log('Attempting to start auction...');
     
+    // Check if auction is already running
     if (auctionState.isRunning) {
-      return res.status(400).json({ message: 'Auction is already running' });
+      console.log('Auction is already running, cannot start again');
+      return res.status(400).json({ 
+        success: false,
+        message: 'Auction is already running',
+        status: 'running'
+      });
     }
+
+    // Check if auction is paused
+    if (auctionState.isPaused) {
+      console.log('Auction is paused, resuming instead of starting new');
+      return res.status(400).json({ 
+        success: false,
+        message: 'Auction is paused. Please resume the auction instead.',
+        status: 'paused'
+      });
+    }
+
+    // Check if auction has ended
+    if (auctionState.isAuctionEnded) {
+      console.log('Previous auction has ended, resetting state before starting new auction');
+      resetAuctionState();
+    }
+
+    console.log('Starting new auction...');
     
-    auctionState.isRunning = true;
-    auctionState.isPaused = false;
-    auctionState.isWaiting = true;
-    auctionState.startTime = new Date();
+    // Use the new startAuction function
+    startAuction();
     
     // Log admin user who started the auction
     const adminUser = req.session?.admin?.username || 'Admin';
     console.log(`Auction started by ${adminUser} at ${auctionState.startTime}`);
     
     // Start waiting timer for next player
-    timerManager.startWaitingTimer(() => {
-      fetchNextPlayer();
-    });
+    try {
+      timerManager.startWaitingTimer(() => {
+        fetchNextPlayer();
+      });
+    } catch (timerError) {
+      console.error('Error starting waiting timer:', timerError);
+      // Reset auction state since timer failed
+      resetAuctionState();
+      throw new Error('Failed to start auction timer');
+    }
     
     // Get socket emitter functions
     const { emitAuctionStatus, emitStateChange } = require('../socket/auctionSocket');
@@ -264,7 +293,7 @@ exports.startAuction = async (req, res) => {
       isRunning: auctionState.isRunning,
       isPaused: auctionState.isPaused,
       isWaiting: auctionState.isWaiting,
-      status: 'waiting', // Add explicit status field
+      status: 'waiting',
       timeRemaining: timerManager.getRemainingWaitingTime(),
       message: 'Auction has started. Selecting first player...',
       startTime: auctionState.startTime
@@ -287,13 +316,20 @@ exports.startAuction = async (req, res) => {
     }
     
     return res.json({ 
+      success: true,
       message: 'Auction started successfully', 
       status: 'running',
       timeRemaining: timerManager.getRemainingWaitingTime()
     });
   } catch (error) {
     console.error('Error starting auction:', error);
-    return res.status(500).json({ message: 'Error starting auction' });
+    // Reset auction state on error
+    resetAuctionState();
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error starting auction',
+      error: error.message
+    });
   }
 };
 
@@ -302,9 +338,22 @@ exports.pauseAuction = async (req, res) => {
   try {
     console.log('Pause auction requested...');
     
-    // Using the global auction state directly
+    // Check if auction is running
     if (!auctionState.isRunning) {
-      return res.status(400).json({ error: 'Auction is not running' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'No auction is currently running',
+        status: 'not_running'
+      });
+    }
+
+    // Check if auction is already paused
+    if (auctionState.isPaused) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Auction is already paused',
+        status: 'paused'
+      });
     }
 
     console.log('Current auction state before pause:', {
@@ -313,10 +362,8 @@ exports.pauseAuction = async (req, res) => {
       isWaiting: auctionState.isWaiting
     });
 
-    // Save the previous state to allow resuming
-    auctionState.isPaused = true;
-    // Keep isRunning as true to indicate that an auction is active but paused
-    // This ensures validatePauseAuction middleware works properly
+    // Use the new pauseAuction function
+    pauseAuction();
     
     // Pause all active timers and store the remaining times
     const timers = timerManager.pauseAllTimers();
@@ -340,22 +387,28 @@ exports.pauseAuction = async (req, res) => {
       // Emit updated auction status
       const { emitAuctionStatus } = require('../socket/auctionSocket');
       emitAuctionStatus({
-        isRunning: auctionState.isRunning,
-        isPaused: auctionState.isPaused,
+        isRunning: true,
+        isPaused: true,
         isWaiting: auctionState.isWaiting,
         status: 'paused',
-        message: 'Auction has been paused'
+        message: 'Auction has been paused',
+        currentPlayer: auctionState.currentPlayer
       });
     }
 
     return res.status(200).json({ 
+      success: true,
       message: 'Auction paused successfully', 
       status: 'paused',
       timers
     });
   } catch (error) {
     console.error('Error pausing auction:', error);
-    return res.status(500).json({ error: 'Failed to pause auction' });
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to pause auction',
+      details: error.message
+    });
   }
 };
 
@@ -374,9 +427,8 @@ exports.resumeAuction = async (req, res) => {
       return res.status(400).json({ error: 'Auction is not paused' });
     }
 
-    // Restore auction state
-    auctionState.isPaused = false;
-    auctionState.isRunning = true;
+    // Use the new resumeAuction function
+    resumeAuction();
 
     // Determine which timer to restart
     const isInWaitingPhase = auctionState.isWaiting;
@@ -497,26 +549,28 @@ function getNextPlayer(auctionState, timerManager) {
 // End auction
 exports.endAuction = async (req, res) => {
   try {
-    console.log('Ending auction...');
+    console.log('End auction requested...');
+    
+    // Check if auction is running or paused
+    if (!auctionState.isRunning && !auctionState.isPaused) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'No auction is currently running or paused',
+        status: 'not_running'
+      });
+    }
+
     console.log('Current auction state before ending:', {
       isRunning: auctionState.isRunning,
       isPaused: auctionState.isPaused,
       isWaiting: auctionState.isWaiting
     });
-    
-    if (!auctionState.isRunning && !auctionState.isPaused) {
-      return res.status(400).json({ success: false, message: 'No active auction to end' });
-    }
 
     // Stop all timers
     timerManager.stopAllTimers();
-
-    // Update auction state
-    auctionState.isRunning = false;
-    auctionState.isPaused = false;
-    auctionState.isWaiting = false;
-    auctionState.endTime = new Date();
-    auctionState.isAuctionEnded = true;
+    
+    // Use the new endAuction function
+    endAuction();
 
     // Create summary of sold players
     const soldPlayersList = auctionState.soldPlayers ? Object.values(auctionState.soldPlayers) : [];
@@ -532,7 +586,7 @@ exports.endAuction = async (req, res) => {
 
     // Create auction result record
     const auctionResult = new AuctionResult({
-      endTime: auctionState.endTime,
+      endTime: new Date(),
       endedBy: req.user ? req.user.username : 'system',
       soldPlayers: soldPlayersList,
       unsoldPlayers: unsoldPlayersList,
@@ -547,30 +601,46 @@ exports.endAuction = async (req, res) => {
 
     // Notify all clients that auction has ended
     const io = require('../socket/auctionSocket').getIO();
-    io.emit('auction_ended', {
-      message: 'Auction has ended',
-      endTime: auctionState.endTime,
-      endedBy: req.user ? req.user.username : 'system',
-      totalPlayers: soldPlayersList.length,
-      totalAmount: totalAmount
-    });
+    if (io) {
+      io.emit('auction_ended', {
+        message: 'Auction has ended',
+        endTime: new Date(),
+        endedBy: req.user ? req.user.username : 'system',
+        totalPlayers: soldPlayersList.length,
+        totalAmount: totalAmount
+      });
+      
+      // Emit updated auction status
+      const { emitAuctionStatus } = require('../socket/auctionSocket');
+      emitAuctionStatus({
+        isRunning: false,
+        isPaused: false,
+        isWaiting: false,
+        status: 'ended',
+        message: 'Auction has ended',
+        summary: {
+          soldPlayers: soldPlayersList.length,
+          totalAmount: totalAmount,
+          teamsParticipated: teamsParticipated.length
+        }
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: 'Auction ended successfully',
       summary: {
         soldPlayers: soldPlayersList.length,
-        unsoldPlayers: unsoldPlayersList.length,
         totalAmount: totalAmount,
-        endTime: auctionState.endTime,
-        statistics: auctionResult.calculateStatistics()
+        teamsParticipated: teamsParticipated.length
       }
     });
   } catch (error) {
     console.error('Error ending auction:', error);
     return res.status(500).json({ 
-      message: 'Error ending auction', 
-      error: error.message 
+      success: false,
+      error: 'Failed to end auction',
+      details: error.message
     });
   }
 };

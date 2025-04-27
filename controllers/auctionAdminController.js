@@ -4,13 +4,287 @@
  * Handles admin-specific auction operations and management
  */
 
-const { auctionState, timerManager } = require('../auction');
+const { auctionState, timerManager, startAuction: startAuctionState } = require('../auction');
 const auctionSocket = require('../socket/auctionSocket');
 const playerModel = require('../models/playerModel');
 const teamModel = require('../models/teamModel');
 const db = require('../utils/database');
 const { notifyAdminAction } = require('../middleware/auctionAdminMiddleware');
 const AuctionResult = require('../models/auctionResult');
+
+// Start auction
+exports.startAuction = async (req, res) => {
+  try {
+    console.log('Admin attempting to start auction...');
+    
+    // Check if auction is already running
+    if (auctionState.isRunning) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Auction is already running',
+        status: 'running'
+      });
+    }
+    
+    // Check if auction is paused
+    if (auctionState.isPaused) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Auction is paused. Please resume the auction instead.',
+        status: 'paused'
+      });
+    }
+    
+    // Get admin username from the session or request
+    const adminUsername = req.adminUser?.username || req.session?.adminUsername || 'Admin';
+    console.log(`Admin ${adminUsername} is starting the auction`);
+    
+    // Start the auction using the state management function
+    startAuctionState();
+    
+    // Start waiting timer for next player
+    timerManager.startWaitingTimer(() => {
+      fetchNextPlayer();
+    });
+    
+    // Create a detailed status object for socket clients
+    const statusObj = {
+      isRunning: auctionState.isRunning,
+      isPaused: auctionState.isPaused,
+      isWaiting: auctionState.isWaiting,
+      status: 'waiting',
+      timeRemaining: timerManager.getRemainingWaitingTime(),
+      message: 'Auction has started. Selecting first player...',
+      startTime: auctionState.startTime
+    };
+    
+    // Emit the detailed status to all clients
+    auctionSocket.emitAuctionStatus(statusObj);
+    
+    // Notify all clients about the auction start
+    notifyAdminAction('start_auction', 
+      `Auction has been started by admin ${adminUsername}`,
+      { startTime: auctionState.startTime }
+    );
+    
+    return res.status(200).json({ 
+      success: true,
+      message: 'Auction started successfully', 
+      status: 'running',
+      timeRemaining: timerManager.getRemainingWaitingTime()
+    });
+  } catch (error) {
+    console.error('Error starting auction:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error starting auction',
+      error: error.message
+    });
+  }
+};
+
+// Helper function to get the next player for auction
+async function fetchNextPlayer() {
+  try {
+    if (!auctionState.isRunning || auctionState.isPaused) {
+      return;
+    }
+    
+    // Get available players
+    const players = await playerModel.getAvailablePlayers();
+    
+    if (!players || players.length === 0) {
+      console.log('No more players to auction');
+      auctionState.isRunning = false;
+      
+      // Create a detailed status object for socket clients
+      const statusObj = {
+        isRunning: false,
+        isPaused: false,
+        isWaiting: false,
+        status: 'ended',
+        message: 'Auction ended. No more players available.'
+      };
+      
+      // Emit the detailed status to all clients
+      auctionSocket.emitAuctionStatus(statusObj);
+      return;
+    }
+    
+    const nextPlayer = players[0];
+    
+    auctionState.currentPlayer = nextPlayer;
+    auctionState.highestBid = nextPlayer.base_price || nextPlayer.basePrice;
+    auctionState.highestBidder = null;
+    auctionState.isWaiting = false;
+    
+    // Emit player update to all clients
+    auctionSocket.emitPlayerUpdate({
+      player: nextPlayer,
+      highestBid: auctionState.highestBid,
+      highestBidder: null
+    });
+    
+    // Start bid timer
+    timerManager.startBidTimer(() => {
+      finalizePlayerSale();
+    });
+    
+    // Create a detailed status object for socket clients
+    const statusObj = {
+      isRunning: auctionState.isRunning,
+      isPaused: auctionState.isPaused,
+      isWaiting: auctionState.isWaiting,
+      status: 'running',
+      currentPlayer: {
+        id: nextPlayer.id || nextPlayer._id,
+        name: nextPlayer.name,
+        role: nextPlayer.role,
+        basePrice: nextPlayer.base_price || nextPlayer.basePrice
+      },
+      timeRemaining: timerManager.getRemainingBidTime(),
+      message: `Next player: ${nextPlayer.name}`
+    };
+    
+    // Emit the detailed status to all clients
+    auctionSocket.emitAuctionStatus(statusObj);
+    
+    console.log(`Next player for auction: ${nextPlayer.name}, Base price: ${nextPlayer.base_price || nextPlayer.basePrice}`);
+  } catch (error) {
+    console.error('Error fetching next player:', error);
+  }
+}
+
+// Helper function to finalize player sale
+async function finalizePlayerSale(isTimeout = true) {
+  try {
+    if (!auctionState.currentPlayer) return;
+    
+    // Make sure we're using the correct ID property (could be id, _id, or both)
+    const playerId = auctionState.currentPlayer.id || auctionState.currentPlayer._id;
+    const playerName = auctionState.currentPlayer.name;
+    
+    // Log the finalization reason
+    console.log(`Finalizing auction for ${playerName} - ${isTimeout ? 'TIMER EXPIRED' : 'MANUAL FINALIZATION'}`);
+    
+    // Get the IO instance
+    const io = require('../socket/auctionSocket').getIO();
+    
+    if (auctionState.highestBidder) {
+      // Player sold
+      await playerModel.updatePlayerStatus(playerId, 'sold');
+      await playerModel.updatePlayerTeam(playerId, auctionState.highestBidder.id || auctionState.highestBidder._id);
+      
+      // Update team budget
+      const newBudget = auctionState.highestBidder.budget - auctionState.highestBid;
+      await teamModel.updateTeamBudget(auctionState.highestBidder.id || auctionState.highestBidder._id, newBudget);
+      
+      // Record bid
+      await bidModel.createBid({
+        player: playerId,
+        team: auctionState.highestBidder.id || auctionState.highestBidder._id,
+        amount: auctionState.highestBid,
+        timestamp: new Date(),
+        auto_finalized: isTimeout
+      });
+      
+      // Add to sold players
+      auctionState.soldPlayers.push({
+        playerId: playerId,
+        playerName: auctionState.currentPlayer.name,
+        soldToTeam: auctionState.highestBidder.id || auctionState.highestBidder._id,
+        teamName: auctionState.highestBidder.name,
+        amount: auctionState.highestBid,
+        auto_finalized: isTimeout
+      });
+      
+      // Prepare result message
+      const resultMessage = isTimeout 
+        ? `Time expired - Player automatically sold to highest bidder (${auctionState.highestBidder.name})`
+        : `Player sold to ${auctionState.highestBidder.name} as highest bidder`;
+      
+      // Emit result
+      auctionSocket.emitAuctionResult({
+        player: auctionState.currentPlayer,
+        team: auctionState.highestBidder,
+        amount: auctionState.highestBid,
+        result: 'sold',
+        auto_finalized: isTimeout,
+        message: resultMessage
+      });
+      
+      // Send message to all clients
+      if (io) {
+        io.to('auction').emit('auction-notification', {
+          type: 'success',
+          title: 'Player Sold',
+          message: resultMessage
+        });
+      }
+      
+    } else {
+      // Player unsold
+      await playerModel.updatePlayerStatus(playerId, 'unsold');
+      
+      // Prepare result message
+      const resultMessage = isTimeout 
+        ? 'Time expired - No bids received, player marked as UNSOLD'
+        : 'Player marked as UNSOLD';
+      
+      // Emit result
+      auctionSocket.emitAuctionResult({
+        player: auctionState.currentPlayer,
+        result: 'unsold',
+        auto_finalized: isTimeout,
+        message: resultMessage
+      });
+      
+      // Send message to all clients
+      if (io) {
+        io.to('auction').emit('auction-notification', {
+          type: 'warning',
+          title: 'Player Unsold',
+          message: resultMessage
+        });
+      }
+    }
+    
+    // Reset current auction state
+    timerManager.resetTimers();
+    
+    // Start waiting timer for next player
+    auctionState.isWaiting = true;
+    timerManager.startWaitingTimer(() => {
+      fetchNextPlayer();
+    });
+    
+    // Create a detailed status object for socket clients
+    const statusObj = {
+      isRunning: auctionState.isRunning,
+      isPaused: auctionState.isPaused,
+      isWaiting: true,
+      status: 'waiting',
+      previousPlayer: {
+        name: playerName,
+        sold: auctionState.highestBidder ? true : false,
+        soldTo: auctionState.highestBidder ? auctionState.highestBidder.name : null,
+        amount: auctionState.highestBidder ? auctionState.highestBid : null,
+        auto_finalized: isTimeout
+      },
+      timeRemaining: timerManager.getRemainingWaitingTime(),
+      message: 'Waiting for next player...'
+    };
+    
+    // Emit the detailed status to all clients
+    auctionSocket.emitAuctionStatus(statusObj);
+  } catch (error) {
+    console.error('Error finalizing player sale:', error);
+  }
+}
+
+// Export the helper functions
+exports.fetchNextPlayer = fetchNextPlayer;
+exports.finalizePlayerSale = finalizePlayerSale;
 
 // Enhanced pause auction function with improved error handling and notifications
 exports.pauseAuction = async (req, res) => {

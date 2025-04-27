@@ -3,7 +3,7 @@
  * Middleware for admin-specific auction operations
  */
 
-const auctionState = require('../auction');
+const { auctionState, startAuction, pauseAuction, resumeAuction, endAuction } = require('../auction');
 const { getIO } = require('../socket/auctionSocket');
 const adminLogger = require('../utils/adminLogger');
 
@@ -51,17 +51,19 @@ exports.validatePauseAuction = (req, res, next) => {
   });
   
   // Check if auction is running and not already paused
-  if (auctionState.isPaused) {
+  if (!auctionState.isRunning) {
     return res.status(400).json({
-      error: 'Auction is already paused',
-      status: 'paused'
+      success: false,
+      error: 'No auction is currently running',
+      status: 'not_running'
     });
   }
   
-  if (!auctionState.isRunning) {
+  if (auctionState.isPaused) {
     return res.status(400).json({
-      error: 'No auction is currently running',
-      status: 'not_running'
+      success: false,
+      error: 'Auction is already paused',
+      status: 'paused'
     });
   }
   
@@ -105,6 +107,7 @@ exports.validateEndAuction = (req, res, next) => {
   // Check if auction exists to end (either running or paused)
   if (!auctionState.isRunning && !auctionState.isPaused) {
     return res.status(400).json({
+      success: false,
       error: 'No auction is currently running or paused',
       status: 'not_running'
     });
@@ -125,12 +128,65 @@ exports.validateEndAuction = (req, res, next) => {
     user: req.adminUser,
     details: {
       reason: req.body.reason || '',
-      soldPlayers: auctionState.soldPlayers.length,
-      unsoldPlayers: auctionState.unsoldPlayers.length,
+      soldPlayers: auctionState.soldPlayers ? auctionState.soldPlayers.length : 0,
+      unsoldPlayers: auctionState.unsoldPlayers ? auctionState.unsoldPlayers.length : 0,
       currentRound: auctionState.currentRound,
       auctionStatus: {
         isRunning: auctionState.isRunning,
         isPaused: auctionState.isPaused
+      }
+    }
+  });
+  
+  next();
+};
+
+/**
+ * Validate start auction request
+ */
+exports.validateStartAuction = (req, res, next) => {
+  // Debug log to check auction state
+  console.log('Validating start request, current auction state:', {
+    isRunning: auctionState.isRunning,
+    isPaused: auctionState.isPaused
+  });
+  
+  // Check if auction is already running
+  if (auctionState.isRunning) {
+    return res.status(400).json({
+      success: false,
+      error: 'Auction is already running',
+      status: 'running'
+    });
+  }
+  
+  // Check if auction is paused
+  if (auctionState.isPaused) {
+    return res.status(400).json({
+      success: false,
+      error: 'Auction is paused. Please resume the auction instead.',
+      status: 'paused'
+    });
+  }
+  
+  // Ensure adminUser exists
+  if (!req.adminUser) {
+    req.adminUser = {
+      id: 'unknown',
+      username: req.session.adminUsername || 'admin'
+    };
+  }
+  
+  // Log action
+  logAdminAction({
+    type: 'start_auction',
+    message: 'Auction started',
+    user: req.adminUser,
+    details: {
+      auctionStatus: {
+        isRunning: auctionState.isRunning,
+        isPaused: auctionState.isPaused,
+        currentRound: auctionState.currentRound
       }
     }
   });

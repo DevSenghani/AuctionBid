@@ -15,49 +15,81 @@ class TimerManager {
     this.waitingStartTime = null; // Timestamp when waiting timer started
     this.pausedBidTimeRemaining = null; // Store remaining time when paused
     this.pausedWaitingTimeRemaining = null; // Store remaining time when paused
+    
+    // Set up interval for emitting regular updates (every 1 second)
+    this.updateInterval = null;
+    this.setupUpdateInterval();
+  }
+  
+  // Set up an interval to send regular timer updates to clients
+  setupUpdateInterval() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+    }
+    
+    // Emit timer updates every second
+    this.updateInterval = setInterval(() => {
+      this.emitTimerUpdates();
+    }, 1000);
+  }
+  
+  // Function to emit real-time timer updates
+  emitTimerUpdates() {
+    try {
+      // Only emit if the timers are running
+      if (this.bidTimer) {
+        emitTimerUpdate(this.timeRemaining, false);
+      } else if (this.waitingTimer) {
+        emitWaitingCountdown(this.waitingTimeRemaining, false);
+      } else if (this.pausedBidTimeRemaining !== null) {
+        emitTimerUpdate(this.pausedBidTimeRemaining, true);
+      } else if (this.pausedWaitingTimeRemaining !== null) {
+        emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
+      }
+    } catch (error) {
+      console.error('Error emitting timer updates:', error);
+    }
   }
 
   startBidTimer(callback) {
-    if (this.bidTimer) {
-      clearInterval(this.bidTimer);
-    }
-    
-    // Use stored time if coming from pause, otherwise use full duration
-    if (this.pausedBidTimeRemaining !== null) {
-      this.timeRemaining = this.pausedBidTimeRemaining;
-      this.pausedBidTimeRemaining = null;
-    } else {
-      this.timeRemaining = this.bidTimerDuration;
-    }
-    
-    this.bidStartTime = Date.now(); // Record when the timer started
-    emitTimerUpdate(this.timeRemaining);
-    
-    this.bidTimer = setInterval(() => {
-      this.timeRemaining--;
+    try {
+      console.log('Starting bid timer...');
       
-      // Emit time update to all clients every second
-      emitTimerUpdate(this.timeRemaining);
+      // Clear any existing timers
+      this.stopAllTimers();
       
-      // Notify when time is getting low
-      if (this.timeRemaining === 10) {
-        // Get reference to auction state
-        const currentState = this.auctionState;
-        const io = require('../socket/auctionSocket').getIO();
+      // Set initial bid time (30 seconds)
+      this.timeRemaining = 30;
+      this.bidStartTime = Date.now();
+      
+      // Start the timer
+      this.bidTimer = setInterval(() => {
+        this.timeRemaining--;
         
-        if (io && currentState) {
-          io.to('auction').emit('bid-warning', {
+        // Emit remaining time to all clients
+        const io = require('../socket/auctionSocket').getIO();
+        if (io) {
+          io.to('auction').emit('bid-time-update', {
             timeRemaining: this.timeRemaining,
-            message: `Auction will ${currentState.highestBidder ? 'finalize to highest bidder' : 'mark player as UNSOLD'} in 10 seconds!`
+            timestamp: Date.now()
           });
         }
-      }
+        
+        // When timer reaches 0
+        if (this.timeRemaining <= 0) {
+          this.stopBidTimer();
+          if (callback) {
+            callback();
+          }
+        }
+      }, 1000);
       
-      if (this.timeRemaining <= 0) {
-        this.stopBidTimer();
-        if (callback) callback();
-      }
-    }, 1000);
+      console.log('Bid timer started successfully');
+    } catch (error) {
+      console.error('Error starting bid timer:', error);
+      this.stopAllTimers();
+      throw new Error('Failed to start bid timer: ' + error.message);
+    }
   }
 
   pauseBidTimer() {
@@ -69,7 +101,8 @@ class TimerManager {
       const elapsed = Math.floor((Date.now() - this.bidStartTime) / 1000);
       this.pausedBidTimeRemaining = Math.max(0, this.bidTimerDuration - elapsed);
       
-      // Emit pause status to clients
+      // Emit pause status to clients with timestamp
+      const { emitTimerUpdate } = require('../socket/auctionSocket');
       emitTimerUpdate(this.pausedBidTimeRemaining, true);
       
       this.bidStartTime = null;
@@ -88,32 +121,44 @@ class TimerManager {
   }
 
   startWaitingTimer(callback) {
-    if (this.waitingTimer) {
-      clearInterval(this.waitingTimer);
-    }
-    
-    // Use stored time if coming from pause, otherwise use full duration
-    if (this.pausedWaitingTimeRemaining !== null) {
-      this.waitingTimeRemaining = this.pausedWaitingTimeRemaining;
-      this.pausedWaitingTimeRemaining = null;
-    } else {
-      this.waitingTimeRemaining = this.waitingTimerDuration;
-    }
-    
-    this.waitingStartTime = Date.now(); // Record when the timer started
-    emitWaitingCountdown(this.waitingTimeRemaining);
-    
-    this.waitingTimer = setInterval(() => {
-      this.waitingTimeRemaining--;
+    try {
+      console.log('Starting waiting timer...');
       
-      // Emit waiting time update to all clients every second
-      emitWaitingCountdown(this.waitingTimeRemaining);
+      // Clear any existing timers
+      this.stopAllTimers();
       
-      if (this.waitingTimeRemaining <= 0) {
-        this.stopWaitingTimer();
-        if (callback) callback();
-      }
-    }, 1000);
+      // Set initial waiting time (10 seconds)
+      this.waitingTimeRemaining = 10;
+      this.waitingStartTime = Date.now();
+      
+      // Start the timer
+      this.waitingTimer = setInterval(() => {
+        this.waitingTimeRemaining--;
+        
+        // Emit remaining time to all clients
+        const io = require('../socket/auctionSocket').getIO();
+        if (io) {
+          io.to('auction').emit('waiting-time-update', {
+            timeRemaining: this.waitingTimeRemaining,
+            timestamp: Date.now()
+          });
+        }
+        
+        // When timer reaches 0
+        if (this.waitingTimeRemaining <= 0) {
+          this.stopWaitingTimer();
+          if (callback) {
+            callback();
+          }
+        }
+      }, 1000);
+      
+      console.log('Waiting timer started successfully');
+    } catch (error) {
+      console.error('Error starting waiting timer:', error);
+      this.stopAllTimers();
+      throw new Error('Failed to start waiting timer: ' + error.message);
+    }
   }
 
   pauseWaitingTimer() {
@@ -125,7 +170,8 @@ class TimerManager {
       const elapsed = Math.floor((Date.now() - this.waitingStartTime) / 1000);
       this.pausedWaitingTimeRemaining = Math.max(0, this.waitingTimerDuration - elapsed);
       
-      // Emit pause status to clients
+      // Emit pause status to clients with timestamp
+      const { emitWaitingCountdown } = require('../socket/auctionSocket');
       emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
       
       this.waitingStartTime = null;
@@ -140,57 +186,69 @@ class TimerManager {
       this.waitingTimer = null;
       this.waitingStartTime = null;
       this.pausedWaitingTimeRemaining = null;
+      console.log('Waiting timer stopped');
     }
   }
 
   stopAllTimers() {
     this.stopBidTimer();
     this.stopWaitingTimer();
+    console.log('All timers stopped');
   }
 
   pauseAllTimers() {
-    const bidTimeRemaining = this.pauseBidTimer();
-    const waitingTimeRemaining = this.pauseWaitingTimer();
-    return { bidTimeRemaining, waitingTimeRemaining };
+    const timers = {
+      waitingTimeRemaining: this.waitingTimeRemaining,
+      bidTimeRemaining: this.timeRemaining,
+      timestamp: Date.now()
+    };
+    
+    this.stopAllTimers();
+    console.log('All timers paused with remaining times:', timers);
+    
+    return timers;
   }
 
   resetTimers() {
-    this.stopAllTimers();
-    this.timeRemaining = 0;
     this.waitingTimeRemaining = 0;
+    this.timeRemaining = 0;
     this.bidStartTime = null;
     this.waitingStartTime = null;
     this.pausedBidTimeRemaining = null;
     this.pausedWaitingTimeRemaining = null;
+    this.stopAllTimers();
+    console.log('All timers reset');
   }
 
   getRemainingBidTime() {
-    // If paused, return the stored paused time
+    // If timer is paused, return the stored value
     if (this.pausedBidTimeRemaining !== null) {
       return this.pausedBidTimeRemaining;
     }
     
-    // If the timer is running, calculate remaining time based on start time
+    // If timer is running, calculate the current time based on start time
     if (this.bidStartTime) {
       const elapsed = Math.floor((Date.now() - this.bidStartTime) / 1000);
-      const remaining = Math.max(0, this.bidTimerDuration - elapsed);
-      return remaining;
+      return Math.max(0, this.bidTimerDuration - elapsed);
     }
+    
+    // Default return the current timeRemaining
     return this.timeRemaining;
   }
 
   getRemainingWaitingTime() {
-    // If paused, return the stored paused time
+    // If timer is paused, return the stored value
     if (this.pausedWaitingTimeRemaining !== null) {
       return this.pausedWaitingTimeRemaining;
     }
     
-    // If the timer is running, calculate remaining time based on start time
+    // If timer is running, calculate the current time based on start time
     if (this.waitingStartTime) {
       const elapsed = Math.floor((Date.now() - this.waitingStartTime) / 1000);
-      const remaining = Math.max(0, this.waitingTimerDuration - elapsed);
-      return remaining;
+      return Math.max(0, this.waitingTimerDuration - elapsed);
     }
+    
+    // Default return the current waitingTimeRemaining
     return this.waitingTimeRemaining;
   }
 }
