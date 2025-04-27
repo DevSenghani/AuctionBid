@@ -9,14 +9,6 @@ const config = {
   database: 'auction_system',
   password: 'Manav@2006',
   port: 5432,
-  // Add connection pool settings for better stability
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
-  connectionTimeoutMillis: 2000, // How long to wait for a connection
-  // Enable automatic reconnection
-  keepAlive: true,
-  // Add statement timeout to prevent long-running queries
-  statement_timeout: 10000 // 10 seconds
 };
 
 console.log('Database connection configuration:', {
