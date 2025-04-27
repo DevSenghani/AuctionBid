@@ -41,6 +41,38 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Database connection test
 const db = require('./utils/database');
 
+// Database health check endpoint
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const status = await db.checkConnection();
+    if (status.connected) {
+      res.json({ status: 'ok', ...status });
+    } else {
+      res.status(503).json({ status: 'error', ...status });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Overall health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    const dbStatus = await db.checkConnection();
+    res.json({
+      server: 'ok',
+      database: dbStatus.connected ? 'ok' : 'error',
+      dbMode: dbStatus.mode
+    });
+  } catch (error) {
+    res.status(500).json({
+      server: 'ok',
+      database: 'error',
+      error: error.message
+    });
+  }
+});
+
 // Routes
 app.get('/', (req, res) => {
   res.redirect('/home');  // Redirect root to the home page
@@ -91,6 +123,21 @@ const socketIO = require('socket.io');
 const io = socketIO(server);
 auctionSocket.init(io); // Pass io instance instead of server
 bidSocket(io);  // Pass the same io instance
+
+// Set up periodic database connection check (every 5 minutes)
+const DB_HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+setInterval(async () => {
+  try {
+    console.log('Performing periodic database health check...');
+    const status = await db.checkConnection();
+    if (!status.connected && status.mode === 'mock') {
+      console.log('Database is disconnected, attempting to reconnect...');
+      db.reconnect();
+    }
+  } catch (error) {
+    console.error('Error during periodic database health check:', error);
+  }
+}, DB_HEALTH_CHECK_INTERVAL);
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {

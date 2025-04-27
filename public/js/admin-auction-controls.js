@@ -195,6 +195,11 @@ document.addEventListener('DOMContentLoaded', function() {
       // Show success notification
       showNotification('Auction Paused', data.message, 'warning');
       
+      // Check for database status
+      if (data.dbStatus === 'using mock data') {
+        showNotification('Database Notice', 'Database connection could not be established. Using mock data for demonstration.', 'info', 8000);
+      }
+      
       // Reset button
       pauseAuctionBtn.innerHTML = '<i class="fas fa-pause-circle me-2"></i>Pause Auction';
       pauseAuctionBtn.disabled = true;
@@ -221,17 +226,17 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Function to handle ending the auction
   function endAuction() {
-    // Confirm before ending
+    // Confirm with user
     if (!confirm('Are you sure you want to end the auction? This action cannot be undone.')) {
       return;
     }
     
-    // Prompt for reason
-    const reason = prompt('You may provide a reason for ending the auction (optional):');
-    
     // Set button loading state
     endAuctionBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Ending...';
     endAuctionBtn.disabled = true;
+    
+    // Optional reason
+    const reason = prompt('You may provide a reason for ending the auction (optional):');
     
     // Make API request to end the auction
     fetch('/admin/auction/end', {
@@ -239,7 +244,7 @@ document.addEventListener('DOMContentLoaded', function() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason: reason || '' })
     })
     .then(response => {
       if (!response.ok) {
@@ -250,34 +255,49 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      // Show success notification
-      showNotification('Auction Ended', data.message, 'info');
-      
-      // Show summary if available
-      if (data.summary) {
-        const summaryHtml = `
-          <div class="mt-3 p-3 border rounded bg-light">
-            <h5>Auction Summary</h5>
-            <p><strong>Players Sold:</strong> ${data.summary.soldPlayers}</p>
-            <p><strong>Total Amount:</strong> ₹${new Intl.NumberFormat('en-IN').format(data.summary.totalAmount)}</p>
-            <p><strong>Teams Participated:</strong> ${data.summary.teamsParticipated}</p>
-          </div>
-        `;
-        
-        // Create and show the modal
-        showSummaryModal('Auction Summary', summaryHtml);
+      // Check for database connection issues
+      if (data.dbStatus === 'using mock data' || data.dbStatus === 'error' || data.warning) {
+        showNotification('Database Notice', 'Database connection could not be established. Using mock data for demonstration.', 'info', 8000);
       }
       
-      // Reset buttons
+      // Show success notification
+      showNotification('Auction Ended', data.message, 'success');
+      
+      // Reset button
       endAuctionBtn.innerHTML = '<i class="fas fa-stop-circle me-2"></i>End Auction';
-      endAuctionBtn.disabled = true;
-      pauseAuctionBtn.disabled = true;
+      
+      // Disable auction control buttons
       startAuctionBtn.disabled = false;
+      pauseAuctionBtn.disabled = true;
+      endAuctionBtn.disabled = true;
       
       // Update status text
       if (auctionStatusText) {
         auctionStatusText.textContent = 'Ended';
-        auctionStatusText.className = 'text-secondary';
+        auctionStatusText.className = 'text-danger';
+      }
+      
+      // Show summary if available
+      if (data.summary) {
+        // Format the summary data into HTML
+        let summaryContent = `
+          <div class="summary-stats">
+            <p><strong>Total Players Sold:</strong> ${data.summary.totalSold || 0}</p>
+            <p><strong>Total Unsold:</strong> ${data.summary.totalUnsold || 0}</p>
+            <p><strong>Total Amount:</strong> ₹${data.summary.totalAmount?.toLocaleString() || 0}</p>
+          </div>
+        `;
+        
+        if (data.summary.highestBid) {
+          summaryContent += `
+            <div class="mt-3">
+              <h6>Highest Bid</h6>
+              <p>${data.summary.highestBid.player} - ₹${data.summary.highestBid.amount?.toLocaleString() || 0} (${data.summary.highestBid.team})</p>
+            </div>
+          `;
+        }
+        
+        showSummaryModal('Auction Summary', summaryContent);
       }
     })
     .catch(error => {
@@ -363,29 +383,52 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // Show toast notification
-  function showNotification(title, message, type = 'info') {
-    const toastContainer = document.createElement('div');
-    toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-    toastContainer.style.zIndex = '5000';
+  function showNotification(title, message, type = 'info', duration = 5000) {
+    const existingToasts = document.querySelectorAll('.toast');
+    const toastOffset = existingToasts.length * 10;
     
-    toastContainer.innerHTML = `
-      <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="toast-header bg-${type} ${type === 'warning' ? 'text-dark' : 'text-white'}">
-          <strong class="me-auto">${title}</strong>
-          <button type="button" class="btn-close ${type !== 'warning' ? 'btn-close-white' : ''}" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-        <div class="toast-body">
-          ${message}
-        </div>
+    const toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+    toastContainer.style.zIndex = '1080';
+    toastContainer.style.marginTop = `${toastOffset}px`;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast show bg-${type} text-white`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+      <div class="toast-header bg-${type} text-white">
+        <strong class="me-auto">${title}</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body">
+        ${message}
       </div>
     `;
     
+    toastContainer.appendChild(toast);
     document.body.appendChild(toastContainer);
     
-    // Remove toast after 5 seconds
+    // Automatically remove the toast after duration
     setTimeout(() => {
-      toastContainer.remove();
-    }, 5000);
+      toast.classList.remove('show');
+      setTimeout(() => {
+        document.body.removeChild(toastContainer);
+      }, 300);
+    }, duration);
+    
+    // Handle close button click
+    const closeBtn = toast.querySelector('.btn-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+          document.body.removeChild(toastContainer);
+        }, 300);
+      });
+    }
   }
   
   // Show a modal with auction summary

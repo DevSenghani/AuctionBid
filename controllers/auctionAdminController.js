@@ -333,6 +333,15 @@ exports.pauseAuction = async (req, res) => {
       };
     }
     
+    // Check database connection before emitting status
+    const db = require('../utils/database');
+    const dbStatus = await db.checkConnection();
+    if (!dbStatus.connected) {
+      console.log('Database connection lost during admin pause, attempting to reconnect...');
+      db.reconnect();
+      console.log('Using mock database for this operation');
+    }
+    
     // Emit the detailed status to all clients
     auctionSocket.emitAuctionStatus(statusObj);
     
@@ -348,7 +357,8 @@ exports.pauseAuction = async (req, res) => {
       message: `Auction paused successfully${pauseReason ? ' - ' + pauseReason : ''}`, 
       paused_at: pauseTime,
       status: 'paused',
-      timers: timers
+      timers: timers,
+      dbStatus: dbStatus.connected ? 'connected' : 'using mock data'
     });
   } catch (error) {
     console.error('Error pausing auction:', error);
@@ -402,6 +412,18 @@ exports.endAuction = async (req, res) => {
       }
     };
     
+    // Check database connection before proceeding
+    const db = require('../utils/database');
+    const dbStatus = await db.checkConnection();
+    if (!dbStatus.connected) {
+      console.log('Database connection lost during admin end auction, attempting to reconnect...');
+      db.reconnect();
+      console.log('Using mock database for this operation');
+      
+      // Even if reconnection fails, we continue with ending the auction
+      // and will use file-based storage as a fallback
+    }
+    
     // Emit the detailed status to all clients
     auctionSocket.emitAuctionStatus(statusObj);
     
@@ -435,7 +457,8 @@ exports.endAuction = async (req, res) => {
         message: 'Auction ended successfully', 
         ended_at: endTime,
         status: 'ended',
-        summary: statistics
+        summary: statistics,
+        dbStatus: dbStatus.connected ? 'connected' : 'using mock data'
       });
     } catch (dbError) {
       console.error('Error saving auction results to database:', dbError);
@@ -443,8 +466,9 @@ exports.endAuction = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: 'Auction ended successfully, but there was an error saving results',
-        status: statusObj,
-        warning: dbError.message
+        status: 'ended',
+        warning: dbError.message,
+        dbStatus: 'error'
       });
     }
   } catch (error) {

@@ -9,6 +9,14 @@ const config = {
   database: 'auction_system',
   password: 'Manav@2006',
   port: 5432,
+  // Add connection pool settings for better stability
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
+  connectionTimeoutMillis: 2000, // How long to wait for a connection
+  // Enable automatic reconnection
+  keepAlive: true,
+  // Add statement timeout to prevent long-running queries
+  statement_timeout: 10000 // 10 seconds
 };
 
 console.log('Database connection configuration:', {
@@ -21,34 +29,92 @@ console.log('Database connection configuration:', {
 // Create a mock database if we can't connect to the real database
 let mockDb = false;
 let pool;
+let reconnectTimer = null;
+const MAX_RECONNECT_ATTEMPTS = 5;
+let reconnectAttempts = 0;
 
-try {
-  pool = new Pool(config);
-  
-  // Test connection
-  pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-      console.error('Database connection error:', err.message);
-      console.log('Using mock database instead');
-      mockDb = true;
-    } else {
-      console.log('Database connected successfully at:', res.rows[0].now);
+// Function to initialize or reinitialize the database connection
+function initializePool() {
+  try {
+    // If there's an existing pool, close it properly first
+    if (pool) {
+      console.log('Closing existing database pool before reconnecting...');
+      pool.end().catch(err => console.error('Error closing pool:', err));
     }
-  });
-  
-  // Error event listener
-  pool.on('error', (err) => {
-    console.error('Unexpected database error:', err.message);
+    
+    // Create a new pool
+    pool = new Pool(config);
+    reconnectAttempts = 0;
+    
+    // Test connection
+    pool.query('SELECT NOW()', (err, res) => {
+      if (err) {
+        console.error('Database connection error:', err.message);
+        console.log('Using mock database instead');
+        mockDb = true;
+        handleReconnect();
+      } else {
+        console.log('Database connected successfully at:', res.rows[0].now);
+        mockDb = false;
+      }
+    });
+    
+    // Error event listener
+    pool.on('error', (err) => {
+      console.error('Unexpected database error:', err.message);
+      
+      // If it's a connection-related error, attempt to reconnect
+      if (err.code === 'PROTOCOL_CONNECTION_LOST' || 
+          err.code === 'ECONNREFUSED' || 
+          err.code === 'ETIMEDOUT' ||
+          err.code === '57P01') { // SQL state code for admin shutdown
+        
+        mockDb = true;
+        handleReconnect();
+      } else {
+        // For other errors, just log and continue with mock data if needed
+        mockDb = true;
+      }
+    });
+  } catch (error) {
+    console.error('Failed to initialize database connection:', error.message);
+    console.log('Using mock database instead');
     mockDb = true;
-  });
-} catch (error) {
-  console.error('Failed to initialize database connection:', error.message);
-  console.log('Using mock database instead');
-  mockDb = true;
+    handleReconnect();
+  }
 }
+
+// Function to handle reconnection attempts
+function handleReconnect() {
+  // Clear any existing reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+  }
+  
+  reconnectAttempts++;
+  
+  if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+    // Exponential backoff for reconnection attempts (1s, 2s, 4s, 8s, 16s)
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
+    
+    console.log(`Attempting to reconnect to database in ${delay/1000} seconds (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+    
+    reconnectTimer = setTimeout(() => {
+      console.log('Attempting database reconnection...');
+      initializePool();
+    }, delay);
+  } else {
+    console.error(`Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts. Using mock database until server restart.`);
+    // We'll continue using mockDb = true
+  }
+}
+
+// Initialize the database connection on startup
+initializePool();
 
 // Create a wrapper function for database queries that falls back to mock data if DB is not available
 const query = async (text, params) => {
+  // If we're in mock mode, return mock data
   if (mockDb) {
     // Return mock data based on the query
     if (text.includes('teams')) {
@@ -72,12 +138,23 @@ const query = async (text, params) => {
     }
   }
 
+  // Try to execute the query, with reconnection logic if it fails
   try {
     return await pool.query(text, params);
   } catch (error) {
     console.error('Query error:', error.message);
     console.error('Query:', text);
     console.error('Parameters:', params);
+    
+    // If it's a connection error, try to reconnect
+    if (error.code === 'PROTOCOL_CONNECTION_LOST' || 
+        error.code === 'ECONNREFUSED' || 
+        error.code === 'ETIMEDOUT' ||
+        error.code === '57P01') {
+      
+      mockDb = true;
+      handleReconnect();
+    }
     
     // Fall back to mock data on error
     mockDb = true;
@@ -228,10 +305,34 @@ const getAuctionResults = async () => {
   }
 };
 
+// Function to check database connection status
+const checkConnection = async () => {
+  try {
+    if (mockDb) {
+      return { connected: false, mode: 'mock' };
+    }
+    
+    const result = await pool.query('SELECT NOW()');
+    return { 
+      connected: true, 
+      timestamp: result.rows[0].now,
+      mode: 'real'
+    };
+  } catch (error) {
+    console.error('Connection check failed:', error.message);
+    return { connected: false, error: error.message, mode: 'mock' };
+  }
+};
+
 module.exports = {
   query,
   pool: mockDb ? null : pool,
   isMockDb: () => mockDb,
   saveAuctionResults,
-  getAuctionResults
+  getAuctionResults,
+  checkConnection,
+  reconnect: () => {
+    reconnectAttempts = 0; // Reset the counter
+    handleReconnect(); // Try reconnecting
+  }
 }; 

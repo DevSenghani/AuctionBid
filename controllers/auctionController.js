@@ -396,11 +396,20 @@ exports.pauseAuction = async (req, res) => {
       });
     }
 
+    // Check database connection before returning response
+    const dbStatus = await db.checkConnection();
+    if (!dbStatus.connected) {
+      console.log('Database connection lost during pause, attempting to reconnect...');
+      db.reconnect();
+      console.log('Using mock database for this operation');
+    }
+
     return res.status(200).json({ 
       success: true,
       message: 'Auction paused successfully', 
       status: 'paused',
-      timers
+      timers,
+      dbStatus: dbStatus.connected ? 'connected' : 'using mock data'
     });
   } catch (error) {
     console.error('Error pausing auction:', error);
@@ -572,6 +581,14 @@ exports.endAuction = async (req, res) => {
     // Use the new endAuction function
     endAuction();
 
+    // Check database connection before proceeding with database operations
+    const dbStatus = await db.checkConnection();
+    if (!dbStatus.connected) {
+      console.log('Database connection lost during end auction, attempting to reconnect...');
+      db.reconnect();
+      console.log('Using mock database for this operation');
+    }
+
     // Create summary of sold players
     const soldPlayersList = auctionState.soldPlayers ? Object.values(auctionState.soldPlayers) : [];
     const unsoldPlayersList = auctionState.unsoldPlayers ? Object.values(auctionState.unsoldPlayers) : [];
@@ -596,8 +613,13 @@ exports.endAuction = async (req, res) => {
       reason: req.body.reason || 'Auction completed by admin'
     });
 
-    // Save the auction result
-    await auctionResult.save();
+    try {
+      // Save the auction result
+      await auctionResult.save();
+    } catch (saveError) {
+      console.error('Error saving auction result, but continuing with auction end:', saveError);
+      // We still continue with ending the auction, just log the error
+    }
 
     // Notify all clients that auction has ended
     const io = require('../socket/auctionSocket').getIO();
@@ -633,7 +655,8 @@ exports.endAuction = async (req, res) => {
         soldPlayers: soldPlayersList.length,
         totalAmount: totalAmount,
         teamsParticipated: teamsParticipated.length
-      }
+      },
+      dbStatus: dbStatus.connected ? 'connected' : 'using mock data'
     });
   } catch (error) {
     console.error('Error ending auction:', error);
