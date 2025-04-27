@@ -82,7 +82,7 @@ exports.deleteTeam = async (req, res) => {
 
 // Delete a player
 exports.deletePlayer = async (req, res) => {
-  const playerId = req.params.id;
+  const playerId = parseInt(req.params.id);
   try {
     // First delete all bids for this player to avoid foreign key constraint violation
     await bidModel.deleteBidsForPlayer(playerId);
@@ -99,8 +99,14 @@ exports.deletePlayer = async (req, res) => {
 
 // Reset auction for a player
 exports.resetPlayerAuction = async (req, res) => {
-  const playerId = req.params.id;
+  const playerId = parseInt(req.params.id);
   try {
+    // First check if the player exists
+    const player = await playerModel.getPlayerById(playerId);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    
     // Delete all bids for this player
     await bidModel.deleteBidsForPlayer(playerId);
     // Reset player's team assignment
@@ -140,7 +146,7 @@ exports.updateTeamPassword = async (req, res) => {
 
 // Assign player to team
 exports.assignPlayerToTeam = async (req, res) => {
-  const playerId = req.params.id;
+  const playerId = parseInt(req.params.id);
   const { team_id, sold_price } = req.body;
   
   try {
@@ -150,7 +156,7 @@ exports.assignPlayerToTeam = async (req, res) => {
     
     // Get the player and team to verify they exist
     const player = await playerModel.getPlayerById(playerId);
-    const team = await teamModel.getTeamById(team_id);
+    const team = await teamModel.getTeamById(parseInt(team_id));
     
     if (!player) {
       return res.status(404).json({ error: 'Player not found' });
@@ -166,11 +172,11 @@ exports.assignPlayerToTeam = async (req, res) => {
     }
     
     // Update player's team
-    await playerModel.updatePlayerTeam(playerId, team_id);
+    await playerModel.updatePlayerTeam(playerId, parseInt(team_id));
     
     // Update team's budget
     const newBudget = team.budget - sold_price;
-    await teamModel.updateTeamBudget(team_id, newBudget);
+    await teamModel.updateTeamBudget(parseInt(team_id), newBudget);
     
     res.status(200).json({ 
       message: 'Player assigned to team successfully',

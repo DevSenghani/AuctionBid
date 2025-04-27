@@ -119,17 +119,47 @@ exports.updatePlayer = async (id, playerData) => {
 exports.updatePlayerTeam = async (playerId, teamId) => {
   try {
     console.log(`Updating player ${playerId} to belong to team ${teamId}...`);
+    
+    // First check if the player exists
+    const checkPlayer = await db.query('SELECT * FROM players WHERE id = $1', [playerId]);
+    if (checkPlayer.rows.length === 0) {
+      console.error(`No player found with ID ${playerId}`);
+      throw new Error('Player not found');
+    }
+    
     const result = await db.query(
       'UPDATE players SET team_id = $1 WHERE id = $2 RETURNING *',
       [teamId, playerId]
     );
-    if (result.rows.length === 0) {
-      console.error(`No player found with ID ${playerId} to update team`);
-      throw new Error('Player not found');
-    }
+    
     return result.rows[0];
   } catch (error) {
     console.error(`Error updating team for player ID ${playerId}:`, error);
+    throw error; // Rethrow for handling in controller
+  }
+};
+
+// Update player's status (sold, unsold, available)
+exports.updatePlayerStatus = async (playerId, status) => {
+  try {
+    console.log(`Updating player ${playerId} status to ${status}...`);
+    
+    // First check if the player exists
+    const checkPlayer = await db.query('SELECT * FROM players WHERE id = $1', [playerId]);
+    if (checkPlayer.rows.length === 0) {
+      console.error(`No player found with ID ${playerId}`);
+      throw new Error('Player not found');
+    }
+    
+    // Update both status and is_auctioned flag
+    const result = await db.query(
+      'UPDATE players SET status = $1, is_auctioned = $2 WHERE id = $3 RETURNING *',
+      [status, true, playerId]
+    );
+    
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error updating status for player ID ${playerId}:`, error);
     throw error; // Rethrow for handling in controller
   }
 };
@@ -144,6 +174,25 @@ exports.deletePlayer = async (id) => {
     return result.rows[0];
   } catch (error) {
     console.error(`Error deleting player with ID ${id}:`, error);
+    throw error; // Rethrow for handling in controller
+  }
+};
+
+// Reset all player statuses to available and clear team assignments
+exports.resetAllPlayerStatus = async () => {
+  try {
+    console.log('Resetting all player statuses to available...');
+    
+    // Update all players to available status and remove team assignments
+    const result = await db.query(
+      'UPDATE players SET status = $1, is_auctioned = $2, team_id = NULL RETURNING *',
+      ['available', false]
+    );
+    
+    console.log(`Reset ${result.rows.length} players to available status`);
+    return result.rows;
+  } catch (error) {
+    console.error('Error resetting player statuses:', error);
     throw error; // Rethrow for handling in controller
   }
 };

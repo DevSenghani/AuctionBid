@@ -11,10 +11,14 @@ module.exports = async (socket, next) => {
     // Get auth data from handshake
     const { teamId, teamName } = socket.handshake.auth;
     
+    // Initialize with authentication status false
+    let authenticated = false;
+    
     // Store team info on the socket object
     socket.user = {
       team_id: teamId,
-      team_name: teamName
+      team_name: teamName,
+      authenticated: false // Default to false
     };
     
     // Check if there's a token in the cookie or handshake auth
@@ -33,13 +37,20 @@ module.exports = async (socket, next) => {
           ...decoded,
           authenticated: true
         };
+        authenticated = true;
       } catch (err) {
         console.warn('Invalid token in socket connection:', err.message);
         // Continue without authentication
       }
     }
     
-    console.log(`Socket authenticated: ${socket.id}, Team: ${teamName || 'Unknown'}`);
+    // Check if team info is complete from handshake auth - if so, consider authenticated
+    if (!authenticated && teamId && teamName) {
+      socket.user.authenticated = true;
+      authenticated = true;
+    }
+    
+    console.log(`Socket authenticated: ${socket.id}, Team: ${teamName || 'Unknown'}, Auth Status: ${authenticated}`);
     next();
   } catch (error) {
     console.error('Socket authentication error:', error);

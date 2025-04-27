@@ -42,7 +42,7 @@ db.serialize(() => {
         player_id INTEGER NOT NULL,
         team_id INTEGER NOT NULL,
         amount REAL NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        bid_time DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (player_id) REFERENCES players(id),
         FOREIGN KEY (team_id) REFERENCES teams(id)
     )`);
@@ -259,7 +259,7 @@ function endAuction() {
 // Bid functions
 function getBidsByPlayerId(playerId) {
     return new Promise((resolve, reject) => {
-        db.all(`SELECT b.id, b.player_id, b.team_id, b.amount, b.timestamp,
+        db.all(`SELECT b.id, b.player_id, b.team_id, b.amount, b.bid_time as timestamp,
                 t.name as team_name
                 FROM bids b
                 JOIN teams t ON b.team_id = t.id
@@ -287,7 +287,7 @@ function placeBid(playerId, teamId, amount) {
                     return;
                 }
                 
-                db.get(`SELECT b.id, b.player_id, b.team_id, b.amount, b.timestamp,
+                db.get(`SELECT b.id, b.player_id, b.team_id, b.amount, b.bid_time as timestamp,
                         t.name as team_name
                         FROM bids b
                         JOIN teams t ON b.team_id = t.id

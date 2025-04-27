@@ -84,7 +84,13 @@ const server = app.listen(PORT, () => {
 
 // Initialize Socket.IO
 const auctionSocket = require('./socket/auctionSocket');
-auctionSocket.init(server);
+const bidSocket = require('./socket/bidSocket');
+const socketIO = require('socket.io');
+
+// Initialize Socket.IO with a single instance
+const io = socketIO(server);
+auctionSocket.init(io); // Pass io instance instead of server
+bidSocket(io);  // Pass the same io instance
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {

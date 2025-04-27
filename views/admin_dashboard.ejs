@@ -8,6 +8,73 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <script src="/socket.io/socket.io.js"></script>
+  <style>
+    .card {
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .card-header {
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      font-weight: 600;
+    }
+    
+    .player-row:hover {
+      background-color: #f8f9fa;
+    }
+    
+    .table th {
+      background-color: #f1f1f1;
+    }
+    
+    .badge {
+      font-weight: 500;
+      padding: 0.4em 0.6em;
+    }
+    
+    /* Role colors */
+    .role-batsman {
+      color: #dc3545;
+    }
+    
+    .role-bowler {
+      color: #28a745;
+    }
+    
+    .role-all-rounder {
+      color: #fd7e14;
+    }
+    
+    .role-wicket-keeper {
+      color: #17a2b8;
+    }
+    
+    /* Status badges */
+    .status-sold {
+      background-color: #28a745;
+    }
+    
+    .status-unsold {
+      background-color: #dc3545;
+    }
+    
+    .status-available {
+      background-color: #fd7e14;
+    }
+    
+    /* Section divider */
+    .section-divider {
+      margin: 2rem 0;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.1), transparent);
+    }
+  </style>
 </head>
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -66,11 +133,15 @@
       </div>
     <% } %>
     
+    <div class="section-divider"></div>
+    <h2><i class="fas fa-users me-2"></i>Player Management</h2>
+    <p class="text-muted">Add, edit and manage players for the auction</p>
+    
     <div class="row">
-      <div class="col-md-12">
+      <div class="col-md-6">
         <div class="card mb-4">
           <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Manage Players</h5>
+            <h5 class="mb-0">Add New Player</h5>
           </div>
           <div class="card-body">
             <form id="player-form" class="mb-3">
@@ -109,8 +180,49 @@
               </div>
               <button type="submit" class="btn btn-success">Add Player</button>
             </form>
-            
-            <h6 class="mt-4">Existing Players</h6>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Player Search & Filters</h5>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <input type="text" class="form-control" id="player-search" placeholder="Search players by name...">
+              </div>
+              <div class="col-md-4">
+                <select class="form-select" id="player-filter">
+                  <option value="all">All Players</option>
+                  <option value="available">Available</option>
+                  <option value="sold">Sold</option>
+                  <option value="unsold">Unsold</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between">
+              <div class="text-muted">
+                <i class="fas fa-info-circle me-1"></i>Total: <span id="player-count"><%= players ? players.length : 0 %></span> players
+              </div>
+              <button class="btn btn-sm btn-outline-primary" id="refresh-players">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card mb-4">
+          <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Existing Players</h5>
+          </div>
+          <div class="card-body">
             <div class="table-responsive">
               <table class="table table-sm table-striped">
                 <thead>
@@ -122,18 +234,37 @@
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody id="players-table-body">
                   <% if (players && players.length > 0) { %>
                     <% players.forEach(player => { %>
-                      <tr>
+                      <tr class="player-row" data-status="<%= player.team_id ? 'sold' : (player.status === 'unsold' ? 'unsold' : 'available') %>">
                         <td><%= player.name %></td>
-                        <td><%= player.role %></td>
+                        <td>
+                          <% const roleClass = player.role === 'Batsman' ? 'role-batsman' : 
+                                            player.role === 'Bowler' ? 'role-bowler' : 
+                                            player.role === 'All-rounder' ? 'role-all-rounder' : 
+                                            player.role === 'Wicket-keeper' ? 'role-wicket-keeper' : ''; %>
+                          <span class="<%= roleClass %>">
+                            <i class="<%= player.role === 'Batsman' ? 'fas fa-baseball-ball' : 
+                                      player.role === 'Bowler' ? 'fas fa-bowling-ball' : 
+                                      player.role === 'All-rounder' ? 'fas fa-running' : 
+                                      player.role === 'Wicket-keeper' ? 'fas fa-hands' : 'fas fa-user' %> me-1"></i>
+                            <%= player.role %>
+                          </span>
+                        </td>
                         <td><%= typeof player.base_price !== 'undefined' ? player.base_price.toLocaleString() : '0' %></td>
                         <td>
                           <% if (player.team_id) { %>
-                            <span class="badge bg-success">Sold to <%= player.team_name || 'Unknown Team' %></span>
+                            <span class="badge bg-success">
+                              <i class="fas fa-check-circle me-1"></i>Sold to <%= player.team_name || 'Unknown Team' %>
+                              <% if (player.sold_price) { %>
+                                for ₹<%= player.sold_price.toLocaleString() %>
+                              <% } %>
+                            </span>
+                          <% } else if (player.status === 'unsold') { %>
+                            <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Unsold</span>
                           <% } else { %>
-                            <span class="badge bg-warning">Available</span>
+                            <span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Available</span>
                           <% } %>
                         </td>
                         <td>
@@ -162,8 +293,11 @@
       </div>
     </div>
 
-    <!-- Auction Control Section -->
-    <div class="row mt-4">
+    <div class="section-divider"></div>
+    <h2><i class="fas fa-gavel me-2"></i>Auction Control</h2>
+    <p class="text-muted">Manage and control the live auction process</p>
+    
+    <div class="row">
       <div class="col-12">
         <div class="card">
           <div class="card-header bg-dark text-white">
@@ -294,6 +428,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/admin-auction-controls.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // Show/hide sold price field based on team selection
@@ -306,355 +441,6 @@
         }
       });
 
-      // Auction control elements
-      const startAuctionBtn = document.getElementById('start-auction-btn');
-      const pauseAuctionBtn = document.getElementById('pause-auction-btn');
-      const endAuctionBtn = document.getElementById('end-auction-btn');
-      const auctionStatusText = document.getElementById('auction-status-text');
-      const auctionStatusMessage = document.getElementById('auction-status-message');
-      const auctionPlayerCount = document.getElementById('auction-player-count');
-      
-      // Initial status check
-      fetchAuctionStatus();
-      
-      // Initialize Socket.IO
-      const socket = io('', {
-        auth: {
-          isAdmin: true
-        }
-      });
-      
-      socket.on('connect', () => {
-        console.log('Admin socket connected: ' + socket.id);
-      });
-      
-      socket.on('disconnect', () => {
-        console.log('Admin socket disconnected');
-      });
-      
-      // Listen for auction status updates
-      socket.on('auction-status', (data) => {
-        updateAuctionStatus(data);
-      });
-      
-      // Listen for new bids
-      socket.on('new-bid', (bid) => {
-        showAlert(`${bid.team_name} bid ₹${new Intl.NumberFormat('en-IN').format(bid.amount)} for ${bid.player_name}`, 'primary');
-      });
-      
-      // Listen for player sold
-      socket.on('player-sold', (data) => {
-        showAlert(`${data.player.name} sold to ${data.team.name} for ₹${new Intl.NumberFormat('en-IN').format(data.amount)}`, 'success', 5000);
-      });
-      
-      // Listen for waiting countdown
-      socket.on('waiting-countdown', (data) => {
-        if (document.getElementById('waiting-countdown')) {
-          document.getElementById('waiting-countdown').textContent = data.seconds;
-        } else {
-          const countdownElem = document.createElement('div');
-          countdownElem.id = 'waiting-countdown';
-          countdownElem.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3 text-center bg-warning rounded';
-          countdownElem.style.zIndex = '5000';
-          countdownElem.innerHTML = `
-            <h5>Select next player</h5>
-            <h2>${data.seconds}</h2>
-            <p>seconds remaining</p>
-          `;
-          document.body.appendChild(countdownElem);
-          
-          // Remove when countdown reaches 0
-          if (data.seconds <= 0) {
-            countdownElem.remove();
-          }
-        }
-      });
-      
-      // Periodically check auction status
-      setInterval(fetchAuctionStatus, 10000); // Every 10 seconds
-      
-      // Fetch auction status
-      function fetchAuctionStatus() {
-        fetch('/admin/auction/status')
-          .then(response => response.json())
-          .then(data => {
-            updateAuctionStatus(data);
-          })
-          .catch(error => {
-            console.error('Error fetching auction status:', error);
-          });
-      }
-      
-      // Update UI based on auction status
-      function updateAuctionStatus(data) {
-        // Update player count
-        auctionPlayerCount.textContent = `${data.availablePlayerCount} Players Available`;
-        
-        // Update status text and message
-        if (data.status === 'running') {
-          auctionStatusText.textContent = 'Running';
-          auctionStatusText.className = 'text-success';
-          
-          // Enable/disable buttons
-          startAuctionBtn.disabled = true;
-          pauseAuctionBtn.disabled = false;
-          endAuctionBtn.disabled = false;
-          
-          // Show current player card if available
-          if (data.currentPlayer) {
-            document.getElementById('current-player-card').classList.remove('d-none');
-            document.getElementById('current-player-name').textContent = data.currentPlayer.name;
-            document.getElementById('current-player-role').textContent = data.currentPlayer.role;
-            document.getElementById('current-player-base-price').textContent = new Intl.NumberFormat('en-IN').format(data.currentPlayer.base_price);
-            
-            // Update timer
-            const timeRemaining = data.timeRemaining || 0;
-            document.getElementById('time-remaining').textContent = `${timeRemaining}s`;
-            
-            // Update progress bar
-            const progressPercent = (timeRemaining / 60) * 100;
-            const progressBar = document.getElementById('time-progress');
-            progressBar.style.width = `${progressPercent}%`;
-            
-            // Change color based on time remaining
-            if (progressPercent > 60) {
-              progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
-            } else if (progressPercent > 30) {
-              progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-warning';
-            } else {
-              progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
-            }
-            
-            // Enable skip button
-            document.getElementById('skip-player-btn').disabled = false;
-          } else {
-            document.getElementById('current-player-card').classList.add('d-none');
-          }
-        } else if (data.status === 'paused') {
-          auctionStatusText.textContent = 'Paused';
-          auctionStatusText.className = 'text-warning';
-          
-          // Enable/disable buttons
-          startAuctionBtn.disabled = false;
-          pauseAuctionBtn.disabled = true;
-          endAuctionBtn.disabled = false;
-          
-          // Current player card remains visible if it was already shown
-          if (data.currentPlayer) {
-            document.getElementById('skip-player-btn').disabled = true;
-          }
-        } else {
-          auctionStatusText.textContent = 'Not Running';
-          auctionStatusText.className = 'text-secondary';
-          
-          // Enable/disable buttons
-          startAuctionBtn.disabled = false;
-          pauseAuctionBtn.disabled = true;
-          endAuctionBtn.disabled = true;
-          
-          // Hide current player card
-          document.getElementById('current-player-card').classList.add('d-none');
-        }
-        
-        // Update status message
-        auctionStatusMessage.textContent = data.message;
-      }
-      
-      // Start auction button
-      startAuctionBtn.addEventListener('click', function() {
-        // Visual feedback
-        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
-        this.disabled = true;
-        
-        fetch('/admin/auction/start', { method: 'POST' })
-          .then(response => response.json())
-          .then(data => {
-            // Show alert with result
-            showAlert(data.message || data.error, data.error ? 'danger' : 'success');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-play-circle me-2"></i>Start Auction';
-            
-            // Refresh status
-            fetchAuctionStatus();
-          })
-          .catch(error => {
-            console.error('Error starting auction:', error);
-            showAlert('Failed to start auction', 'danger');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-play-circle me-2"></i>Start Auction';
-            this.disabled = false;
-          });
-      });
-      
-      // Pause auction button
-      pauseAuctionBtn.addEventListener('click', function() {
-        // Visual feedback
-        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Pausing...';
-        this.disabled = true;
-        
-        fetch('/admin/auction/pause', { method: 'POST' })
-          .then(response => response.json())
-          .then(data => {
-            // Show alert with result
-            showAlert(data.message || data.error, data.error ? 'danger' : 'warning');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-pause-circle me-2"></i>Pause Auction';
-            
-            // Refresh status
-            fetchAuctionStatus();
-          })
-          .catch(error => {
-            console.error('Error pausing auction:', error);
-            showAlert('Failed to pause auction', 'danger');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-pause-circle me-2"></i>Pause Auction';
-            this.disabled = false;
-          });
-      });
-      
-      // End auction button
-      endAuctionBtn.addEventListener('click', function() {
-        // Confirm before ending
-        if (!confirm('Are you sure you want to end the auction? This action cannot be undone.')) {
-          return;
-        }
-        
-        // Visual feedback
-        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Ending...';
-        this.disabled = true;
-        
-        fetch('/admin/auction/end', { method: 'POST' })
-          .then(response => response.json())
-          .then(data => {
-            // Show alert with result
-            showAlert(data.message || data.error, data.error ? 'danger' : 'info');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-stop-circle me-2"></i>End Auction';
-            
-            // Refresh status
-            fetchAuctionStatus();
-          })
-          .catch(error => {
-            console.error('Error ending auction:', error);
-            showAlert('Failed to end auction', 'danger');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-stop-circle me-2"></i>End Auction';
-            this.disabled = false;
-          });
-      });
-      
-      // Skip player button
-      document.getElementById('skip-player-btn').addEventListener('click', function() {
-        // Confirm before skipping
-        if (!confirm('Are you sure you want to skip the current player?')) {
-          return;
-        }
-        
-        // Visual feedback
-        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Skipping...';
-        this.disabled = true;
-        
-        fetch('/admin/auction/next', { method: 'POST' })
-          .then(response => response.json())
-          .then(data => {
-            // Show alert with result
-            showAlert(data.message || data.error, data.error ? 'danger' : 'warning');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-forward me-2"></i>Skip to Next Player';
-            
-            // Refresh status
-            fetchAuctionStatus();
-          })
-          .catch(error => {
-            console.error('Error skipping player:', error);
-            showAlert('Failed to skip player', 'danger');
-            
-            // Reset button text
-            this.innerHTML = '<i class="fas fa-forward me-2"></i>Skip to Next Player';
-            this.disabled = false;
-          });
-      });
-      
-      // Start auction for specific player buttons
-      document.querySelectorAll('.start-player-auction-btn').forEach(button => {
-        button.addEventListener('click', function() {
-          const playerId = this.getAttribute('data-player-id');
-          const playerName = this.getAttribute('data-player-name');
-          
-          // Confirm before starting auction
-          if (!confirm(`Are you sure you want to start auction for ${playerName}?`)) {
-            return;
-          }
-          
-          // Visual feedback
-          this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
-          this.disabled = true;
-          
-          fetch('/admin/auction/player', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ player_id: playerId })
-          })
-            .then(response => response.json())
-            .then(data => {
-              // Show alert with result
-              showAlert(data.message || data.error, data.error ? 'danger' : 'success');
-              
-              // Reset button text
-              this.innerHTML = '<i class="fas fa-gavel me-1"></i>Start Auction';
-              this.disabled = false;
-              
-              // Refresh status
-              fetchAuctionStatus();
-            })
-            .catch(error => {
-              console.error('Error starting player auction:', error);
-              showAlert('Failed to start auction for player', 'danger');
-              
-              // Reset button text
-              this.innerHTML = '<i class="fas fa-gavel me-1"></i>Start Auction';
-              this.disabled = false;
-            });
-        });
-      });
-      
-      // Show temporary alert messages
-      function showAlert(message, type = 'info') {
-        // Create alert element
-        const alertContainer = document.createElement('div');
-        alertContainer.className = 'position-fixed top-0 end-0 p-3';
-        alertContainer.style.zIndex = '5000';
-        
-        alertContainer.innerHTML = `
-          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header bg-${type} text-white">
-              <strong class="me-auto">Auction Control</strong>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-            <div class="toast-body">
-              ${message}
-            </div>
-          </div>
-        `;
-        
-        // Add to document
-        document.body.appendChild(alertContainer);
-        
-        // Remove after 3 seconds
-        setTimeout(() => {
-          alertContainer.remove();
-        }, 3000);
-      }
-      
       // Player form submission
       document.getElementById('player-form').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -693,7 +479,7 @@
       // Delete player button click
       document.querySelectorAll('.delete-player-btn').forEach(button => {
         button.addEventListener('click', function() {
-          const playerId = this.getAttribute('data-player-id');
+          const playerId = parseInt(this.getAttribute('data-player-id'));
           
           if (confirm('Are you sure you want to delete this player?')) {
             fetch(`/admin/players/${playerId}`, {
@@ -715,7 +501,7 @@
       // Reset player auction button click
       document.querySelectorAll('.reset-player-btn').forEach(button => {
         button.addEventListener('click', function() {
-          const playerId = this.getAttribute('data-player-id');
+          const playerId = parseInt(this.getAttribute('data-player-id'));
           
           if (confirm('Are you sure you want to reset this player\'s auction?')) {
             fetch(`/admin/players/${playerId}/reset`, {
@@ -737,7 +523,7 @@
       // Assign player to team button click
       document.querySelectorAll('.assign-player-btn').forEach(button => {
         button.addEventListener('click', function() {
-          const playerId = this.getAttribute('data-player-id');
+          const playerId = parseInt(this.getAttribute('data-player-id'));
           const playerName = this.getAttribute('data-player-name');
           
           // Set modal title and player ID
@@ -758,7 +544,7 @@
       
       // Confirm assign player button click
       document.getElementById('confirm-assign-btn').addEventListener('click', function() {
-        const playerId = document.getElementById('assign-player-id').value;
+        const playerId = parseInt(document.getElementById('assign-player-id').value);
         const teamId = document.getElementById('assign-team').value;
         const soldPrice = parseInt(document.getElementById('assign-price').value);
         
@@ -795,6 +581,52 @@
         // Hide the modal
         const assignModal = bootstrap.Modal.getInstance(document.getElementById('assignPlayerModal'));
         assignModal.hide();
+      });
+
+      // Player search and filter functionality
+      const playerSearch = document.getElementById('player-search');
+      const playerFilter = document.getElementById('player-filter');
+      const refreshPlayersBtn = document.getElementById('refresh-players');
+      const playerRows = document.querySelectorAll('.player-row');
+      const playerCount = document.getElementById('player-count');
+      
+      // Function to filter players based on search term and filter value
+      function filterPlayers() {
+        const searchTerm = playerSearch.value.toLowerCase();
+        const filterValue = playerFilter.value;
+        let visibleCount = 0;
+        
+        playerRows.forEach(row => {
+          const playerName = row.querySelector('td:first-child').textContent.toLowerCase();
+          const playerStatus = row.getAttribute('data-status');
+          
+          // Check if player matches both search term and filter
+          const matchesSearch = playerName.includes(searchTerm);
+          const matchesFilter = filterValue === 'all' || playerStatus === filterValue;
+          
+          if (matchesSearch && matchesFilter) {
+            row.style.display = '';
+            visibleCount++;
+          } else {
+            row.style.display = 'none';
+          }
+        });
+        
+        // Update player count
+        playerCount.textContent = visibleCount;
+      }
+      
+      // Add event listeners for search and filter
+      playerSearch.addEventListener('input', filterPlayers);
+      playerFilter.addEventListener('change', filterPlayers);
+      
+      // Refresh players button click
+      refreshPlayersBtn.addEventListener('click', function() {
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing...';
+        this.disabled = true;
+        
+        // Reload the page to refresh the player list
+        window.location.reload();
       });
     });
   </script>

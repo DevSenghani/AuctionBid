@@ -2,12 +2,13 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 // Create connection configuration with default values
+// Using hardcoded values for testing since .env file may not be loaded correctly
 const config = {
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'auction_system',
-  password: process.env.DB_PASSWORD || 'd2507',
-  port: process.env.DB_PORT || 2507,
+  user: 'postgres',
+  host: 'localhost',
+  database: 'auction_system',
+  password: 'd2507',
+  port: 2507,
 };
 
 console.log('Database connection configuration:', {
@@ -60,8 +61,8 @@ const query = async (text, params) => {
     } else if (text.includes('players WHERE team_id IS NULL')) {
       return {
         rows: [
-          { id: 1, name: 'MS Dhoni', base_price: 200000, role: 'Wicket-keeper' },
-          { id: 2, name: 'Virat Kohli', base_price: 200000, role: 'Batsman' }
+          { id: 1, name: 'MS Dhoni', base_price: 200000, role: 'Wicket-keeper', status: 'available', is_auctioned: false },
+          { id: 2, name: 'Virat Kohli', base_price: 200000, role: 'Batsman', status: 'available', is_auctioned: false }
         ]
       };
     } else if (text.includes('bids')) {

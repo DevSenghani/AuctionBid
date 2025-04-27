@@ -150,6 +150,11 @@
         <i class="fas fa-circle-notch fa-spin fa-2x mb-3"></i>
         <h4>Waiting for auction to start...</h4>
         <p>The administrator will start the auction soon. Please wait.</p>
+        <!-- Dedicated container for countdown that will be shown/hidden as needed -->
+        <div class="countdown-number my-3 alert alert-warning" style="display:none;">
+          <strong>Next player in: <span id="countdown-seconds">0</span> seconds</strong><br>
+          <small>The admin is selecting the next player...</small>
+        </div>
       </div>
     </div>
     
@@ -234,7 +239,7 @@
                       <h5 class="mb-0"><%= team.name %></h5>
                       <div class="team-budget">
                         <span class="badge bg-primary">
-                          <i class="fas fa-wallet me-1"></i>Budget:₹<%= typeof team.budget !== 'undefined' ? team.budget.toLocaleString() : '0' %>
+                          <i class="fas fa-wallet me-1"></i>Budget:₹<%= typeof teams.budget !== 'undefined' ? team.budget.toLocaleString() : '0' %>
                         </span>
                         <span class="badge bg-secondary ms-2">
                           <i class="fas fa-users me-1"></i>Players: <%= team.player_count || 0 %>
@@ -309,37 +314,101 @@
       let timerInterval = null;
       let currentPlayerData = null;
       let socket;
+      let bidSocket;
       
-      // Initialize Socket.IO
+      // Initialize Socket.IO connection
       function initializeSocket() {
-        // Set socket connection
-        socket = io('', {
+        // Connect to auctionSocket
+        socket = io();
+        
+        // Connect to bidSocket namespace
+        bidSocket = io('/bid', {
           auth: {
             teamId: teamId ? teamId.value : null,
-            teamName: '<%= team ? team.name : null %>'
+            teamName: '<%= typeof team !== "undefined" ? team.name : "" %>',
+            token: document.cookie.split(';').find(c => c.trim().startsWith('token='))?.split('=')[1]
           }
+        });
+        
+        // Log connection info to help debug
+        console.log('Team info for socket:', {
+          teamId: teamId ? teamId.value : 'Not available',
+          teamName: '<%= typeof team !== "undefined" ? team.name : "Not available" %>'
         });
         
         // Socket connection event
         socket.on('connect', () => {
-          console.log('Socket connected: ' + socket.id);
+          console.log('Auction Socket connected: ' + socket.id);
+        });
+        
+        // bidSocket connection event
+        bidSocket.on('connect', () => {
+          console.log('Bid Socket connected: ' + bidSocket.id);
+        });
+        
+        // Debug connection status
+        bidSocket.on('connection_debug', (data) => {
+          console.log('BidSocket connection debug:', data);
         });
         
         // Socket disconnection event
         socket.on('disconnect', () => {
-          console.log('Socket disconnected');
+          console.log('Auction Socket disconnected');
+        });
+        
+        // bidSocket disconnection event
+        bidSocket.on('disconnect', () => {
+          console.log('Bid Socket disconnected');
         });
         
         // Listen for auction status updates
         socket.on('auction-status', (data) => {
+          console.log('Received auction status update:', data);
           handleAuctionStatus(data);
         });
         
-        // Listen for new bids
+        // Listen for new bids (on both sockets for backward compatibility)
         socket.on('new-bid', (data) => {
           if (currentPlayerId && currentPlayerId.value === data.player_id) {
             updateBidInfo(data);
           }
+        });
+        
+        // Listen for new bids on bidSocket
+        bidSocket.on('new-bid', (data) => {
+          if (currentPlayerId && currentPlayerId.value === data.player_id) {
+            updateBidInfo(data);
+          }
+        });
+        
+        // Handle bidSocket errors
+        bidSocket.on('bid_error', (data) => {
+          alert('Bid Error: ' + data.message);
+        });
+        
+        // Handle bidSocket success
+        bidSocket.on('bid_placed', (data) => {
+          // Show success toast
+          const toastContainer = document.createElement('div');
+          toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+          toastContainer.style.zIndex = '5';
+          toastContainer.innerHTML = `
+            <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+              <div class="toast-header bg-success text-white">
+                <strong class="me-auto">Success</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+              </div>
+              <div class="toast-body">
+                    ${data.message || 'Bid placed successfully!'}
+              </div>
+            </div>
+          `;
+          document.body.appendChild(toastContainer);
+          
+          // Remove toast after 3 seconds
+          setTimeout(() => {
+            toastContainer.remove();
+          }, 3000);
         });
         
         // Listen for player sold
@@ -354,7 +423,9 @@
         
         // Listen for waiting countdown
         socket.on('waiting-countdown', (data) => {
-          showWaitingCountdown(data.seconds);
+          // Use data.timeRemaining instead of data.seconds
+          const seconds = data.timeRemaining || data.seconds || 0;
+          showWaitingCountdown(seconds);
         });
         
         // Listen for next player
@@ -362,6 +433,24 @@
           if (player) {
             loadPlayerDetails(player.id);
           }
+        });
+        
+        // Listen for timer updates from server
+        socket.on('timer-update', (data) => {
+          console.log('Received timer update:', data);
+          updateTimer(data.timeRemaining);
+        });
+        
+        // Listen for bid warning
+        socket.on('bid-warning', (data) => {
+          console.log('Received bid warning:', data);
+          showBidWarning(data.message);
+        });
+        
+        // Listen for auction notifications
+        socket.on('auction-notification', (data) => {
+          console.log('Received auction notification:', data);
+          showNotification(data.title, data.message, data.type);
         });
       }
       
@@ -376,19 +465,20 @@
       
       // Show waiting countdown
       function showWaitingCountdown(seconds) {
+        // Make sure seconds is a valid number
+        seconds = Number(seconds) || 0;
+        
         if (waitingMessage) {
-          const countdownElem = waitingMessage.querySelector('.countdown-number') || 
-                               document.createElement('div');
+          const countdownElem = waitingMessage.querySelector('.countdown-number');
+          const countdownSecondsElem = document.getElementById('countdown-seconds');
           
-          if (!countdownElem.classList.contains('countdown-number')) {
-            countdownElem.className = 'countdown-number my-3 alert alert-warning';
-            waitingMessage.querySelector('.mb-3').appendChild(countdownElem);
+          if (countdownElem && countdownSecondsElem) {
+            // Update seconds display
+            countdownSecondsElem.textContent = seconds;
+            
+            // Show countdown
+            countdownElem.style.display = 'block';
           }
-          
-          countdownElem.innerHTML = `
-            <strong>Next player in: ${seconds} seconds</strong><br>
-            <small>The admin is selecting the next player...</small>
-          `;
           
           // Show waiting message
           waitingMessage.style.display = 'block';
@@ -526,10 +616,128 @@
         }
       }
       
+      // Show notification
+      function showNotification(title, message, type = 'info') {
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'position-fixed bottom-0 start-50 translate-middle-x p-3';
+        toastContainer.style.zIndex = '5';
+        
+        // Determine background color based on type
+        let bgColor = 'bg-info';
+        if (type === 'success') bgColor = 'bg-success';
+        if (type === 'warning') bgColor = 'bg-warning';
+        if (type === 'danger') bgColor = 'bg-danger';
+        
+        toastContainer.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header ${bgColor} ${type === 'warning' ? 'text-dark' : 'text-white'}">
+              <strong class="me-auto">${title}</strong>
+              <button type="button" class="btn-close ${type === 'warning' ? '' : 'btn-close-white'}" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body text-center">
+              ${message}
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(toastContainer);
+        
+        // Remove toast after 5 seconds
+        setTimeout(() => {
+          toastContainer.remove();
+        }, 5000);
+      }
+      
+      // Show bid warning
+      function showBidWarning(message) {
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'position-fixed top-50 start-50 translate-middle p-3';
+        toastContainer.style.zIndex = '5';
+        toastContainer.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-warning text-dark">
+              <strong class="me-auto">Auction Ending Soon</strong>
+              <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body text-center">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              ${message}
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(toastContainer);
+        
+        // Make the timer flash
+        bidTimer.classList.add('warning');
+        
+        // Remove toast after 7 seconds
+        setTimeout(() => {
+          toastContainer.remove();
+        }, 7000);
+      }
+      
       // Handle auction status updates
       function handleAuctionStatus(data) {
-        // Update auction status badge
-        if (data.status === 'running') {
+        // First, reset countdown visibility
+        const countdownElem = waitingMessage.querySelector('.countdown-number');
+        if (countdownElem) {
+          countdownElem.style.display = 'none';
+        }
+        
+        // Update auction status badge based on status field
+        const status = data.status || 
+                     (data.isRunning && !data.isPaused && !data.isWaiting ? 'running' : 
+                      data.isRunning && data.isPaused ? 'paused' : 
+                      data.isRunning && data.isWaiting ? 'waiting' : 'not_running');
+        
+        console.log('Auction status update:', status, data);
+        
+        // Handle auction ended status specially
+        if (status === 'ended') {
+          auctionStatusBadge.textContent = 'Auction Ended';
+          auctionStatusBadge.className = 'badge bg-secondary';
+          
+          // Show waiting message with custom text
+          waitingMessage.style.display = 'block';
+          auctionContainer.style.display = 'none';
+          
+          // Update waiting message text
+          const msgElement = waitingMessage.querySelector('h4');
+          if (msgElement) {
+            msgElement.textContent = 'Auction has ended';
+          }
+          
+          // Update description
+          const descElement = waitingMessage.querySelector('p');
+          if (descElement) {
+            if (data.summary) {
+              descElement.innerHTML = `
+                <div class="text-center mb-3">
+                  <h5>Auction Summary</h5>
+                  <p><strong>Players Sold:</strong> ${data.summary.soldPlayers}</p>
+                  <p><strong>Players Unsold:</strong> ${data.summary.unsoldPlayers}</p>
+                  <p><strong>Total Amount:</strong> ${formatCurrency(data.summary.totalAmount)}</p>
+                </div>
+                <div class="alert alert-info">
+                  Thank you for participating in the auction. View the results page for complete details.
+                </div>
+              `;
+            } else {
+              descElement.textContent = 'The auction has ended. Thank you for participating.';
+            }
+          }
+          
+          // Disable bidding controls
+          if (placeBidBtn) {
+            placeBidBtn.disabled = true;
+          }
+          
+          return;
+        }
+        
+        // Handle each status type appropriately
+        if (status === 'running') {
           auctionStatusBadge.textContent = 'Auction Running';
           auctionStatusBadge.className = 'badge bg-success';
           
@@ -542,26 +750,49 @@
           
           // If there's a current player and it's different from what we have
           if (data.currentPlayer && (!currentPlayerData || data.currentPlayer.id !== currentPlayerData.id)) {
-            loadPlayerDetails(data.currentPlayer.id);
+            // Load the player details using ID or directly from the data
+            if (data.currentPlayer.id) {
+              loadPlayerDetails(data.currentPlayer.id);
+            } else if (currentPlayerId && currentPlayerId.value) {
+              loadPlayerDetails(currentPlayerId.value);
+            }
           }
-        } else if (data.status === 'waiting') {
+        } else if (status === 'waiting') {
           auctionStatusBadge.textContent = 'Waiting for Next Player';
           auctionStatusBadge.className = 'badge bg-info';
           
           // Show waiting message
           waitingMessage.style.display = 'block';
           auctionContainer.style.display = 'none';
-        } else if (data.status === 'paused') {
+          
+          // Show countdown if available
+          if (data.timeRemaining !== undefined) {
+            showWaitingCountdown(data.timeRemaining);
+          }
+          
+          // If we have a custom message, update the waiting message text
+          if (data.message) {
+            const msgElement = waitingMessage.querySelector('h4');
+            if (msgElement) {
+              msgElement.textContent = data.message;
+            }
+          }
+        } else if (status === 'paused') {
           auctionStatusBadge.textContent = 'Auction Paused';
           auctionStatusBadge.className = 'badge bg-warning';
           
-          // Keep showing the current player but indicate paused state
+          // Update UI based on current state
           if (data.currentPlayer) {
+            // If we have a current player, keep showing that player but update UI to show paused state
             waitingMessage.style.display = 'none';
             auctionContainer.style.display = 'flex';
             
+            // Update timer display
             bidTimer.textContent = "PAUSED";
             bidTimer.classList.add('warning');
+            
+            // Stop any timer progress animation
+            timeProgress.className = 'progress-bar bg-warning';
             
             // Disable bid button
             if (placeBidBtn) {
@@ -571,8 +802,20 @@
             // No current player, show waiting message
             waitingMessage.style.display = 'block';
             auctionContainer.style.display = 'none';
+            
+            // Update message
+            const msgElement = waitingMessage.querySelector('h4');
+            if (msgElement) {
+              msgElement.textContent = data.message || 'Auction is paused';
+            }
+            
+            const descElement = waitingMessage.querySelector('p');
+            if (descElement) {
+              descElement.textContent = 'The administrator has paused the auction. Please wait for it to resume.';
+            }
           }
         } else {
+          // Not running
           auctionStatusBadge.textContent = 'Auction Not Running';
           auctionStatusBadge.className = 'badge bg-secondary';
           
@@ -582,6 +825,17 @@
           
           // Reset player data
           currentPlayerData = null;
+          
+          // Update message
+          const msgElement = waitingMessage.querySelector('h4');
+          if (msgElement) {
+            msgElement.textContent = data.message || 'Waiting for auction to start...';
+          }
+          
+          const descElement = waitingMessage.querySelector('p');
+          if (descElement) {
+            descElement.textContent = 'The administrator will start the auction soon. Please wait.';
+          }
         }
       }
       
@@ -736,59 +990,73 @@
           placeBidBtn.disabled = true;
           placeBidBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
           
-          // Submit bid
-          fetch('/auction/bid', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
+          // Send bid using bidSocket
+          if (bidSocket && bidSocket.connected) {
+            bidSocket.emit('place_bid', {
               player_id: playerId,
-              team_id: teamId.value,
               amount: amount
-            })
-          })
-          .then(response => {
-            if (!response.ok) {
-              return response.json().then(err => { throw new Error(err.error) });
-            }
-            return response.json();
-          })
-          .then(data => {
-            // Show success toast
-            const toastContainer = document.createElement('div');
-            toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-            toastContainer.style.zIndex = '5';
-            toastContainer.innerHTML = `
-              <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="toast-header bg-success text-white">
-                  <strong class="me-auto">Success</strong>
-                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-                <div class="toast-body">
-                  Bid placed successfully!
-                </div>
-              </div>
-            `;
-            document.body.appendChild(toastContainer);
+            });
             
-            // Remove toast after 3 seconds
+            // Reset button state after a short delay (actual reset will happen in bid_placed event)
             setTimeout(() => {
-              toastContainer.remove();
-            }, 3000);
-            
-            // Reset button state
-            placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
-            placeBidBtn.disabled = false;
-          })
-          .catch(error => {
-            // Reset button state
-            placeBidBtn.disabled = false;
-            placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
-            
-            // Show error alert
-            alert('Error placing bid: ' + error.message);
-          });
+              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+              placeBidBtn.disabled = false;
+            }, 1000);
+          } else {
+            // Fallback to HTTP API if socket not connected
+            fetch('/auction/bid', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                player_id: playerId,
+                team_id: teamId.value,
+                amount: amount
+              })
+            })
+            .then(response => {
+              if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error) });
+              }
+              return response.json();
+            })
+            .then(data => {
+              // Show success toast
+              const toastContainer = document.createElement('div');
+              toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+              toastContainer.style.zIndex = '5';
+              toastContainer.innerHTML = `
+                <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+                  <div class="toast-header bg-success text-white">
+                    <strong class="me-auto">Success</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                  </div>
+                  <div class="toast-body">
+                    ${data.message || 'Bid placed successfully!'}
+                  </div>
+                </div>
+              `;
+              document.body.appendChild(toastContainer);
+              
+              // Remove toast after 3 seconds
+              setTimeout(() => {
+                toastContainer.remove();
+              }, 3000);
+              
+              // Reset button state
+              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+              placeBidBtn.disabled = false;
+            })
+            .catch(error => {
+              // Reset button state
+              placeBidBtn.disabled = false;
+              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+              
+              // Show error alert
+              alert('Error placing bid: ' + error.message);
+            });
+          }
         });
       }
       

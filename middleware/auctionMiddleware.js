@@ -41,4 +41,56 @@ exports.isAuctionNotRunning = (auctionState) => {
     }
     next();
   };
+};
+
+// Middleware to check if auction can be paused
+exports.canPauseAuction = (auctionState) => {
+  return (req, res, next) => {
+    if (!auctionState.isRunning) {
+      return res.status(400).json({
+        error: 'Cannot pause: No auction is currently running',
+        status: 'not_running'
+      });
+    }
+    
+    if (auctionState.isPaused) {
+      return res.status(400).json({
+        error: 'Auction is already paused',
+        status: 'paused'
+      });
+    }
+    
+    next();
+  };
+};
+
+// Middleware to check if auction can be ended
+exports.canEndAuction = (auctionState) => {
+  return (req, res, next) => {
+    if (!auctionState.isRunning && !auctionState.isPaused) {
+      return res.status(400).json({
+        error: 'Cannot end: No auction is currently running or paused',
+        status: 'not_running'
+      });
+    }
+    
+    next();
+  };
+};
+
+// Middleware to validate auction state transitions
+exports.validateStateTransition = (fromState, toState, auctionState) => {
+  return (req, res, next) => {
+    const currentState = auctionState.isPaused ? 'paused' : 
+                         auctionState.isRunning ? 'running' : 'not_running';
+    
+    if (fromState !== currentState) {
+      return res.status(400).json({
+        error: `Invalid state transition: Current state is '${currentState}', expected '${fromState}'`,
+        status: currentState
+      });
+    }
+    
+    next();
+  };
 }; 

@@ -2,15 +2,15 @@
  * Socket.IO configuration for real-time auction updates
  */
 
-const socketIO = require('socket.io');
 let io = null;
 
 // Authentication middleware for socket connections
 const socketAuthMiddleware = require('../middleware/socketAuthMiddleware');
 
 // Initialize Socket.IO
-exports.init = (server) => {
-  io = socketIO(server);
+const init = (ioInstance) => {
+  // Use the provided io instance instead of creating a new one
+  io = ioInstance;
   
   // Apply authentication middleware
   io.use(socketAuthMiddleware);
@@ -45,45 +45,158 @@ exports.init = (server) => {
 };
 
 // Get the Socket.IO instance
-exports.getIO = () => {
+const getIO = () => {
   if (!io) {
     throw new Error('Socket.IO not initialized');
   }
   return io;
 };
 
-// Emit auction status updates to all connected clients
-exports.emitAuctionStatus = (status) => {
-  if (!io) return;
-  io.to('auction').emit('auction-status', status);
+// Export function to emit auction status to all clients in the auction room
+const emitAuctionStatus = (statusObj) => {
+  try {
+    // Convert any status object to have both old and new field names for compatibility
+    const status = statusObj.status || (statusObj.isPaused ? 'paused' : (statusObj.isWaiting ? 'waiting' : 'running'));
+    
+    // Create a normalized status object with standardized fields
+    const normalizedStatus = {
+      // New field names
+      isRunning: statusObj.isRunning !== undefined ? statusObj.isRunning : true,
+      isPaused: statusObj.isPaused !== undefined ? statusObj.isPaused : false,
+      isWaiting: statusObj.isWaiting !== undefined ? statusObj.isWaiting : false,
+      timeRemaining: statusObj.timeRemaining || 0,
+      
+      // Legacy field for backward compatibility
+      status: status,
+      
+      // Include message if provided
+      message: statusObj.message || `Auction is ${status}`
+    };
+    
+    // Include current player info if it exists
+    if (statusObj.currentPlayer) {
+      normalizedStatus.currentPlayer = statusObj.currentPlayer;
+    }
+    
+    if (io) {
+      io.to('auction').emit('auction-status', normalizedStatus);
+    } else {
+      console.warn('IO not initialized when attempting to emit auction status');
+    }
+  } catch (error) {
+    console.error('Error emitting auction status:', error);
+  }
+};
+
+// Function to emit timer status updates
+const emitTimerStatus = (timerType, status, timeRemaining) => {
+  try {
+    if (!io) {
+      console.warn('IO not initialized when attempting to emit timer status');
+      return;
+    }
+    
+    const timerStatus = {
+      type: timerType, // 'bid' or 'waiting'
+      status: status,  // 'running', 'paused', 'stopped'
+      timeRemaining: timeRemaining || 0
+    };
+    
+    io.to('auction').emit('timer-update', timerStatus);
+  } catch (error) {
+    console.error('Error emitting timer status:', error);
+  }
 };
 
 // Emit player updates to all connected clients
-exports.emitPlayerUpdate = (data) => {
+const emitPlayerUpdate = (data) => {
   if (!io) return;
   io.to('auction').emit('player-update', data);
 };
 
 // Emit auction result (sold or unsold) to all connected clients
-exports.emitAuctionResult = (result) => {
+const emitAuctionResult = (result) => {
   if (!io) return;
   io.to('auction').emit('auction-result', result);
 };
 
 // Emit timer updates to all connected clients
-exports.emitTimerUpdate = (timeRemaining) => {
+const emitTimerUpdate = (timeRemaining, isPaused = false) => {
   if (!io) return;
-  io.to('auction').emit('timer-update', { timeRemaining });
+  io.to('auction').emit('timer-update', { 
+    timeRemaining,
+    isPaused
+  });
 };
 
 // Emit waiting countdown updates to all connected clients
-exports.emitWaitingCountdown = (timeRemaining) => {
+const emitWaitingCountdown = (timeRemaining, isPaused = false) => {
   if (!io) return;
-  io.to('auction').emit('waiting-countdown', { timeRemaining });
+  // Include both timeRemaining and seconds properties for backward compatibility
+  io.to('auction').emit('waiting-countdown', { 
+    timeRemaining: timeRemaining,
+    seconds: timeRemaining,
+    isPaused
+  });
 };
 
 // Send specific message to a team
-exports.emitToTeam = (teamId, event, data) => {
+const sendTeamMessage = (teamId, event, data) => {
   if (!io) return;
   io.to(`team-${teamId}`).emit(event, data);
-}; 
+};
+
+// Emit admin action notification to all connected clients
+const emitAdminAction = (action, message, data = {}) => {
+  if (!io) return;
+  
+  io.to('auction').emit('admin-action', {
+    action,
+    message,
+    timestamp: new Date(),
+    ...data
+  });
+};
+
+// Emit auction state change notification
+const emitStateChange = (prevState, newState, reason, adminUser = null) => {
+  if (!io) return;
+  
+  const stateChangeData = {
+    prevState,
+    newState,
+    reason,
+    adminUser,
+    timestamp: new Date()
+  };
+  
+  io.to('auction').emit('auction-state-change', stateChangeData);
+};
+
+// Export functions
+module.exports = {
+  init,
+  getIO,
+  emitAuctionStatus,
+  emitTimerStatus,
+  emitPlayerUpdate,
+  emitAuctionResult,
+  emitTimerUpdate,
+  emitWaitingCountdown,
+  sendTeamMessage,
+  emitAdminAction,
+  emitStateChange
+};
+
+// Add backward compatibility exports
+exports.init = init;
+exports.getIO = getIO;
+exports.emitAuctionStatus = emitAuctionStatus;
+exports.emitTimerStatus = emitTimerStatus;
+exports.emitPlayerUpdate = emitPlayerUpdate;
+exports.emitAuctionResult = emitAuctionResult;
+exports.emitTimerUpdate = emitTimerUpdate;
+exports.emitWaitingCountdown = emitWaitingCountdown;
+exports.emitToTeam = sendTeamMessage;
+exports.emitAdminAction = emitAdminAction;
+exports.emitStateChange = emitStateChange; 

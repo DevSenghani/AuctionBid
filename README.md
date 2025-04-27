@@ -69,6 +69,20 @@ A web application for managing cricket player auctions with real-time bidding fu
 
 7. Open your browser and navigate to `http://localhost:3000`
 
+### Database Migrations
+
+If you're upgrading from a previous version, you may need to run database migrations to add new columns:
+
+1. Run the migration script to add auction-related columns to the players table:
+   ```
+   npm run migrate
+   ```
+
+   Or manually using psql:
+   ```
+   psql -U postgres -d auction_system -f scripts/add_player_columns.sql
+   ```
+
 ## Usage
 
 ### Admin Dashboard

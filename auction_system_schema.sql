@@ -1,4 +1,3 @@
-
 -- Database: auction_system
 
 -- Drop existing tables if they exist
@@ -20,7 +19,9 @@ CREATE TABLE players (
     name VARCHAR(100) NOT NULL,
     base_price INT NOT NULL,
     role VARCHAR(50),
-    team_id INT REFERENCES teams(id)
+    team_id INT REFERENCES teams(id),
+    status VARCHAR(20) DEFAULT 'available',
+    is_auctioned BOOLEAN DEFAULT false
 );
 
 -- Bids table

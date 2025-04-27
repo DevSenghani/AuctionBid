@@ -3,6 +3,8 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const adminAuthController = require('../controllers/adminAuthController');
 const auctionController = require('../controllers/auctionController');
+const auctionAdminController = require('../controllers/auctionAdminController');
+const { isAuctionAdmin, validatePauseAuction, validateEndAuction } = require('../middleware/auctionAdminMiddleware');
 
 // Admin authentication routes
 router.get('/login', adminAuthController.showLoginPage);
@@ -28,9 +30,32 @@ router.post('/players/:id/assign', adminAuthController.isAuthenticated, adminCon
 // Auction control routes (protected)
 router.get('/auction/status', adminAuthController.isAuthenticated, auctionController.getAuctionStatus);
 router.post('/auction/start', adminAuthController.isAuthenticated, auctionController.startAuction);
-router.post('/auction/pause', adminAuthController.isAuthenticated, auctionController.pauseAuction);
-router.post('/auction/end', adminAuthController.isAuthenticated, auctionController.endAuction);
+
+// Enhanced auction admin routes with new middleware
+router.post('/auction/pause', 
+  adminAuthController.isAuthenticated, 
+  isAuctionAdmin, 
+  validatePauseAuction, 
+  auctionAdminController.pauseAuction
+);
+
+router.post('/auction/end', 
+  adminAuthController.isAuthenticated, 
+  isAuctionAdmin, 
+  validateEndAuction, 
+  auctionAdminController.endAuction
+);
+
+// Stats endpoint for auction admin
+router.get('/auction/admin-stats', 
+  adminAuthController.isAuthenticated, 
+  isAuctionAdmin, 
+  auctionAdminController.getAuctionAdminStats
+);
+
+// Original routes (can be migrated later)
 router.post('/auction/next', adminAuthController.isAuthenticated, auctionController.skipToNextPlayer);
 router.post('/auction/player', adminAuthController.isAuthenticated, auctionController.startPlayerAuction);
+router.post('/auction/reset', adminAuthController.isAuthenticated, auctionController.resetAuction);
 
 module.exports = router;

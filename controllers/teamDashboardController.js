@@ -35,19 +35,22 @@ exports.showDashboard = async (req, res) => {
     let bid_history = [];
     try {
       const bids = await bidModel.getBidsByTeam(teamId);
+      console.log(`Retrieved ${bids.length} bids for team ID ${teamId}`);
       
       // Enhance the bid data with additional information
       for (const bid of bids) {
-        const highestBid = await bidModel.getHighestBid(bid.player_id);
-        
-        bid_history.push({
-          ...bid,
-          is_winning: highestBid && highestBid.id === bid.id,
-          is_active: !bid.player.team_id // auction still active if player has no team
-        });
+        try {
+          const highestBid = await bidModel.getHighestBid(bid.player_id);
+          
+          bid_history.push({
+            ...bid,
+            is_winning: highestBid && highestBid.id === bid.id,
+            is_active: !bid.player.team_id || bid.player.status === 'available' // auction still active if player has no team or status is available
+          });
+        } catch (innerError) {
+          console.error(`Error processing bid for player ${bid.player_id}:`, innerError);
+        }
       }
-      
-      console.log(`Retrieved ${bid_history.length} bids for team ID ${teamId}`);
     } catch (bidError) {
       console.error('Error fetching team bid history:', bidError);
       bid_history = []; // Set to empty array to prevent template issues
