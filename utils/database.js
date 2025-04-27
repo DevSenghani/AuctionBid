@@ -7,8 +7,8 @@ const config = {
   user: 'postgres',
   host: 'localhost',
   database: 'auction_system',
-  password: 'Manav@2006',
-  port: 5432,
+  password: 'd2507',
+  port: 2507,
 };
 
 console.log('Database connection configuration:', {
