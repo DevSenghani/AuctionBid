@@ -101,11 +101,6 @@
               Results
             </a>
           </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/admin">
-              Admin
-            </a>
-          </li>
         </ul>
         <ul class="navbar-nav">
           <% if (typeof team !== 'undefined') { %>
@@ -371,8 +366,58 @@
         
         // Listen for auction status updates
         socket.on('auction-status', (data) => {
-          console.log('Received auction status update:', data);
-          handleAuctionStatus(data);
+          try {
+            console.log('Received auction status:', data);
+            const { isRunning, isPaused, isWaiting, currentPlayer, message, timeRemaining } = data;
+            
+            // Update auction status badge
+            if (auctionStatusBadge) {
+              if (!isRunning) {
+                auctionStatusBadge.textContent = 'Not Running';
+                auctionStatusBadge.className = 'badge bg-secondary';
+              } else if (isPaused) {
+                auctionStatusBadge.textContent = 'Paused';
+                auctionStatusBadge.className = 'badge bg-warning';
+              } else if (isWaiting) {
+                auctionStatusBadge.textContent = 'Waiting';
+                auctionStatusBadge.className = 'badge bg-info';
+              } else {
+                auctionStatusBadge.textContent = 'Running';
+                auctionStatusBadge.className = 'badge bg-success';
+              }
+            }
+            
+            // Update current player if provided
+            if (currentPlayer) {
+              // Update player details
+              if (playerName) playerName.textContent = currentPlayer.name;
+              if (playerRole) playerRole.textContent = currentPlayer.role;
+              if (playerRoleBadge) {
+                playerRoleBadge.textContent = currentPlayer.role;
+                updateRoleBadgeColor(playerRoleBadge, currentPlayer.role);
+              }
+              if (playerBasePrice) playerBasePrice.textContent = formatCurrency(currentPlayer.basePrice);
+              
+              // Update current player ID
+              if (currentPlayerId) currentPlayerId.value = currentPlayer.id;
+              
+              // Show auction container and hide waiting message
+              if (waitingMessage) waitingMessage.style.display = 'none';
+              if (auctionContainer) auctionContainer.style.display = 'block';
+            }
+            
+            // Update timer if provided
+            if (timeRemaining !== undefined && bidTimer) {
+              updateTimer(timeRemaining);
+            }
+            
+            // Show status message if provided
+            if (message) {
+              showStatusMessage(message);
+            }
+          } catch (error) {
+            console.error('Error handling auction status:', error);
+          }
         });
         
         // Listen for new bids (on both sockets for backward compatibility)
@@ -1137,6 +1182,27 @@
             });
           }
         });
+      }
+      
+      // Helper function to update role badge color
+      function updateRoleBadgeColor(badge, role) {
+        badge.className = 'badge ' + 
+          (role.toLowerCase().includes('batsman') ? 'bg-primary' :
+           role.toLowerCase().includes('bowler') ? 'bg-success' :
+           role.toLowerCase().includes('all-rounder') ? 'bg-warning' :
+           role.toLowerCase().includes('wicket-keeper') ? 'bg-info' : 'bg-secondary');
+      }
+      
+      // Helper function to show status message
+      function showStatusMessage(message) {
+        const statusMessageElem = document.getElementById('status-message');
+        if (statusMessageElem) {
+          statusMessageElem.textContent = message;
+          statusMessageElem.style.display = 'block';
+          setTimeout(() => {
+            statusMessageElem.style.display = 'none';
+          }, 5000);
+        }
       }
       
       // Initialize Socket.IO

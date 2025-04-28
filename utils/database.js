@@ -2,23 +2,27 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 // Create connection configuration with default values
-// Using hardcoded values for testing since .env file may not be loaded correctly
 const config = {
-  user: 'postgres',
-  host: 'localhost',
-  database: 'auction_system',
-  password: 'Manav@2006',
-  port: 5432,
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'auction_system',
+  password: process.env.DB_PASSWORD || 'd2507',
+  port: parseInt(process.env.DB_PORT || '2507'),
+  // Add connection timeout and pool settings
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 20 // Maximum number of clients in the pool
 };
 
 console.log('Database connection configuration:', {
   user: config.user,
   host: config.host,
   database: config.database,
-  port: config.port
+  port: config.port,
+  connectionTimeout: config.connectionTimeoutMillis,
+  idleTimeout: config.idleTimeoutMillis
 });
 
-// Create a mock database if we can't connect to the real database
 let mockDb = false;
 let pool;
 let reconnectTimer = null;
@@ -26,12 +30,12 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 let reconnectAttempts = 0;
 
 // Function to initialize or reinitialize the database connection
-function initializePool() {
+async function initializePool() {
   try {
     // If there's an existing pool, close it properly first
     if (pool) {
       console.log('Closing existing database pool before reconnecting...');
-      pool.end().catch(err => console.error('Error closing pool:', err));
+      await pool.end().catch(err => console.error('Error closing pool:', err));
     }
     
     // Create a new pool
@@ -39,37 +43,37 @@ function initializePool() {
     reconnectAttempts = 0;
     
     // Test connection
-    pool.query('SELECT NOW()', (err, res) => {
-      if (err) {
-        console.error('Database connection error:', err.message);
-        console.log('Using mock database instead');
-        mockDb = true;
-        handleReconnect();
-      } else {
-        console.log('Database connected successfully at:', res.rows[0].now);
-        mockDb = false;
+    const testResult = await pool.query('SELECT NOW()');
+    console.log('Database connected successfully at:', testResult.rows[0].now);
+    mockDb = false;
+
+    // Set up error handlers
+    pool.on('error', (err, client) => {
+      console.error('Unexpected database error on client:', err.message);
+      if (client) {
+        client.release(true); // Release with error
       }
-    });
-    
-    // Error event listener
-    pool.on('error', (err) => {
-      console.error('Unexpected database error:', err.message);
       
-      // If it's a connection-related error, attempt to reconnect
       if (err.code === 'PROTOCOL_CONNECTION_LOST' || 
           err.code === 'ECONNREFUSED' || 
           err.code === 'ETIMEDOUT' ||
-          err.code === '57P01') { // SQL state code for admin shutdown
-        
+          err.code === '57P01') {
         mockDb = true;
         handleReconnect();
-      } else {
-        // For other errors, just log and continue with mock data if needed
-        mockDb = true;
       }
     });
+
+    pool.on('connect', (client) => {
+      console.log('New client connected to database');
+    });
+
+    pool.on('remove', (client) => {
+      console.log('Client removed from pool');
+    });
+
   } catch (error) {
     console.error('Failed to initialize database connection:', error.message);
+    console.error('Error stack:', error.stack);
     console.log('Using mock database instead');
     mockDb = true;
     handleReconnect();
@@ -102,7 +106,7 @@ function handleReconnect() {
 }
 
 // Initialize the database connection on startup
-initializePool();
+initializePool().catch(console.error);
 
 // Create a wrapper function for database queries that falls back to mock data if DB is not available
 const query = async (text, params) => {

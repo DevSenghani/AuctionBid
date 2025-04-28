@@ -197,109 +197,118 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Socket event handlers
-  socket.on('auction-status', (data) => {
-    console.log('Auction status update received:', data);
-    
-    // Get timer elements
-    const bidTimer = document.getElementById('bid-timer');
-    const timeProgress = document.getElementById('time-progress');
-    
-    // Handle timers based on auction status
-    if (data.isRunning && !data.isPaused) {
-      if (data.isWaiting) {
-        // Initialize waiting timer
-        const waitingTime = data.timeRemaining || 10;
-        
-        // Get waiting message elements
-        const waitingMessage = document.querySelector('.waiting-message h4');
-        if (waitingMessage) {
-          waitingMessage.textContent = `Next player in ${waitingTime}s`;
-        }
-        
-        // Start a dynamic countdown
-        startDynamicTimer(waitingTime, document.getElementById('waiting-countdown'));
-      } else if (data.currentPlayer) {
-        // Initialize bidding timer
-        const biddingTime = data.timeRemaining || 30;
-        startDynamicTimer(biddingTime, bidTimer, timeProgress);
-      }
-    } else if (data.isPaused) {
-      // Show paused state
-      if (bidTimer) {
-        bidTimer.textContent = "PAUSED";
-        bidTimer.classList.add('text-warning');
-      }
+  socket.on('playerUpdate', (data) => {
+    try {
+      const { player, highestBid, highestBidder } = data;
       
-      if (timeProgress) {
-        timeProgress.className = 'progress-bar bg-warning';
-      }
+      // Update player information in the UI
+      updatePlayerInfo(player);
+      
+      // Update bid information
+      updateBidInfo(highestBid, highestBidder);
+      
+      // Update player status
+      updatePlayerStatus(player.status);
+      
+      console.log('Received player update:', {
+        playerId: player.id,
+        playerName: player.name,
+        highestBid,
+        highestBidder
+      });
+    } catch (error) {
+      console.error('Error handling player update:', error);
     }
   });
 
-  // Handle timer updates 
-  socket.on('timer-update', (data) => {
-    console.log('Timer update received:', data);
-    
-    // Get timer elements
-    const bidTimer = document.getElementById('bid-timer');
-    const timeProgress = document.getElementById('time-progress');
-    
-    if (data.isPaused) {
-      // Show paused state
-      if (bidTimer) {
-        bidTimer.textContent = "PAUSED";
-        bidTimer.classList.add('text-warning');
+  socket.on('auctionStatus', (data) => {
+    try {
+      const { isRunning, isPaused, isWaiting, currentPlayer, message } = data;
+      
+      // Update auction status UI
+      updateAuctionStatus(isRunning, isPaused, isWaiting);
+      
+      // Update current player if provided
+      if (currentPlayer) {
+        updatePlayerInfo(currentPlayer);
       }
       
-      if (timeProgress) {
-        timeProgress.className = 'progress-bar bg-warning';
+      // Show status message if provided
+      if (message) {
+        showStatusMessage(message);
       }
-    } else {
-      // Calculate accurate time based on timestamp
-      const serverTimestamp = data.timestamp;
-      const clientTimestamp = Date.now();
-      const timeDiff = Math.floor((clientTimestamp - serverTimestamp) / 1000);
       
-      // Adjust remaining time based on network delay
-      const adjustedTime = Math.max(0, data.timeRemaining - timeDiff);
-      
-      // Update the timer display
-      startDynamicTimer(adjustedTime, bidTimer, timeProgress);
+      console.log('Received auction status:', {
+        isRunning,
+        isPaused,
+        isWaiting,
+        currentPlayerId: currentPlayer?.id
+      });
+    } catch (error) {
+      console.error('Error handling auction status:', error);
     }
   });
 
-  // Handle waiting timer updates
-  socket.on('waiting-countdown', (data) => {
-    console.log('Waiting countdown update received:', data);
+  // Helper functions
+  function updatePlayerInfo(player) {
+    const playerInfoContainer = document.getElementById('playerInfo');
+    if (!playerInfoContainer) return;
     
-    // Get waiting message elements
-    const waitingMessage = document.querySelector('.waiting-message h4');
-    const waitingCountdown = document.getElementById('waiting-countdown');
+    playerInfoContainer.innerHTML = `
+      <div class="player-card">
+        <img src="${player.image || 'default-player.jpg'}" alt="${player.name}" class="player-image">
+        <div class="player-details">
+          <h3>${player.name}</h3>
+          <p>Role: ${player.role}</p>
+          <p>Base Price: ${formatCurrency(player.basePrice)}</p>
+          <p>Status: ${player.status}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function updateBidInfo(highestBid, highestBidder) {
+    const bidInfoContainer = document.getElementById('bidInfo');
+    if (!bidInfoContainer) return;
     
-    if (data.isPaused) {
-      // Show paused state
-      if (waitingMessage) {
-        waitingMessage.textContent = "Waiting - PAUSED";
-        waitingMessage.classList.add('text-warning');
-      }
-    } else {
-      // Calculate accurate time based on timestamp
-      const serverTimestamp = data.timestamp;
-      const clientTimestamp = Date.now();
-      const timeDiff = Math.floor((clientTimestamp - serverTimestamp) / 1000);
-      
-      // Adjust remaining time based on network delay
-      const adjustedTime = Math.max(0, data.seconds - timeDiff);
-      
-      // Update waiting message text
-      if (waitingMessage) {
-        waitingMessage.textContent = `Next player in ${adjustedTime}s`;
-      }
-      
-      // Update the countdown display
-      if (waitingCountdown) {
-        startDynamicTimer(adjustedTime, waitingCountdown);
-      }
-    }
-  });
+    bidInfoContainer.innerHTML = `
+      <div class="bid-details">
+        <p>Highest Bid: ${formatCurrency(highestBid)}</p>
+        <p>Highest Bidder: ${highestBidder || 'No bids yet'}</p>
+      </div>
+    `;
+  }
+
+  function updatePlayerStatus(status) {
+    const statusElement = document.getElementById('playerStatus');
+    if (!statusElement) return;
+    
+    statusElement.textContent = status;
+    statusElement.className = `status-${status.toLowerCase()}`;
+  }
+
+  function updateAuctionStatus(isRunning, isPaused, isWaiting) {
+    const statusContainer = document.getElementById('auctionStatus');
+    if (!statusContainer) return;
+    
+    let statusText = 'Stopped';
+    if (isRunning) statusText = 'Running';
+    if (isPaused) statusText = 'Paused';
+    if (isWaiting) statusText = 'Waiting';
+    
+    statusContainer.textContent = `Auction Status: ${statusText}`;
+  }
+
+  function showStatusMessage(message) {
+    const messageContainer = document.getElementById('statusMessage');
+    if (!messageContainer) return;
+    
+    messageContainer.textContent = message;
+    messageContainer.style.display = 'block';
+    
+    // Hide message after 5 seconds
+    setTimeout(() => {
+      messageContainer.style.display = 'none';
+    }, 5000);
+  }
 });

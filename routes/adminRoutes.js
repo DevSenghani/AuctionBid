@@ -7,6 +7,7 @@ const auctionAdminController = require('../controllers/auctionAdminController');
 const { isAuctionAdmin, validatePauseAuction, validateEndAuction, validateStartAuction, validateResumeAuction } = require('../middleware/auctionAdminMiddleware');
 const AuctionResult = require('../models/auctionResult');
 const { uploadPlayerImage } = require('../utils/uploadUtils');
+const playerModel = require('../models/playerModel');
 
 // Admin authentication routes
 router.get('/login', adminAuthController.showLoginPage);
@@ -15,6 +16,7 @@ router.get('/logout', adminAuthController.logout);
 
 // Main admin dashboard (protected)
 router.get('/', adminAuthController.isAuthenticated, adminController.showAdminDashboard);
+router.get('/players', adminAuthController.isAuthenticated, adminController.showPlayerManagement);
 
 // Team management (protected)
 router.post('/teams', adminAuthController.isAuthenticated, adminController.createTeam);
@@ -22,6 +24,15 @@ router.delete('/teams/:id', adminAuthController.isAuthenticated, adminController
 router.post('/teams/:id/password', adminAuthController.isAuthenticated, adminController.updateTeamPassword);
 
 // Player management (protected)
+router.get('/players/all', adminAuthController.isAuthenticated, async (req, res) => {
+  try {
+    const players = await playerModel.getAllPlayers();
+    res.status(200).json({ players });
+  } catch (error) {
+    console.error('Error fetching players:', error);
+    res.status(500).json({ error: 'Failed to fetch players' });
+  }
+});
 router.post('/players', adminAuthController.isAuthenticated, adminController.createPlayer);
 router.put('/players/:id', adminAuthController.isAuthenticated, adminController.updatePlayer);
 router.delete('/players/:id', adminAuthController.isAuthenticated, adminController.deletePlayer);

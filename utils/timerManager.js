@@ -356,6 +356,67 @@ class TimerManager {
       throw new Error('Failed to resume waiting timer: ' + error.message);
     }
   }
+
+  // Resume all timers with their previously stored times
+  resumeAllTimers() {
+    try {
+      console.log('Resuming all timers...');
+      
+      // Get the pause state
+      const pauseState = this.getPauseState();
+      
+      // Emit current player information first
+      if (this.auctionState.currentPlayer) {
+        const { emitPlayerUpdate, emitAuctionStatus } = require('../socket/auctionSocket');
+        
+        // Emit player update
+        emitPlayerUpdate({
+          player: this.auctionState.currentPlayer,
+          highestBid: this.auctionState.highestBid,
+          highestBidder: this.auctionState.highestBidder
+        });
+        
+        // Emit auction status
+        emitAuctionStatus({
+          isRunning: true,
+          isPaused: false,
+          isWaiting: false,
+          status: 'running',
+          currentPlayer: {
+            id: this.auctionState.currentPlayer.id || this.auctionState.currentPlayer._id,
+            name: this.auctionState.currentPlayer.name,
+            role: this.auctionState.currentPlayer.role,
+            basePrice: this.auctionState.currentPlayer.base_price || this.auctionState.currentPlayer.basePrice
+          },
+          timeRemaining: pauseState.bidTimeRemaining,
+          message: `Auction resumed for player ${this.auctionState.currentPlayer.name}`
+        });
+      }
+      
+      // Resume the appropriate timer based on which one was active
+      if (pauseState.bidTimeRemaining > 0) {
+        this.resumeBidTimer(() => {
+          // Callback for when bid timer completes
+          if (this.auctionState.currentPlayer) {
+            const { finalizePlayerSale } = require('../controllers/auctionController');
+            finalizePlayerSale(true);
+          }
+        });
+      } else if (pauseState.waitingTimeRemaining > 0) {
+        this.resumeWaitingTimer(() => {
+          // Callback for when waiting timer completes
+          const { fetchNextPlayer } = require('../controllers/auctionAdminController');
+          fetchNextPlayer();
+        });
+      }
+      
+      console.log('All timers resumed successfully');
+    } catch (error) {
+      console.error('Error resuming all timers:', error);
+      this.stopAllTimers();
+      throw new Error('Failed to resume timers: ' + error.message);
+    }
+  }
 }
 
 module.exports = TimerManager; 

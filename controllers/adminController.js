@@ -71,24 +71,54 @@ exports.createPlayer = async (req, res) => {
 
 // Update an existing player
 exports.updatePlayer = async (req, res) => {
-  const playerId = parseInt(req.params.id);
   try {
-    // First check if the player exists
-    const player = await playerModel.getPlayerById(playerId);
-    if (!player) {
-      return res.status(404).json({ error: 'Player not found' });
+    const { id } = req.params;
+    const { name, role, base_price, image_url, status } = req.body;
+
+    // Validate required fields
+    if (!name || !role || !base_price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, role, and base price are required'
+      });
     }
-    
-    // Update the player with new data
-    const updatedPlayer = await playerModel.updatePlayer(playerId, req.body);
-    
-    res.status(200).json({ 
+
+    // Validate status if provided
+    if (status && !['available', 'sold', 'unsold'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value. Must be one of: available, sold, unsold'
+      });
+    }
+
+    const updatedPlayer = await playerModel.updatePlayer(id, {
+      name,
+      role,
+      base_price,
+      image_url,
+      status: status || 'available'
+    });
+
+    if (!updatedPlayer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Player not found'
+      });
+    }
+
+    return res.json({
+      success: true,
       message: 'Player updated successfully',
       player: updatedPlayer
     });
+
   } catch (error) {
     console.error('Error updating player:', error);
-    res.status(500).json({ error: 'Failed to update player' });
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating player',
+      error: error.message
+    });
   }
 };
 
@@ -246,6 +276,76 @@ exports.assignPlayerToTeam = async (req, res) => {
   } catch (error) {
     console.error('Error assigning player to team:', error);
     res.status(500).json({ error: 'Failed to assign player to team' });
+  }
+};
+
+// Get team details for a player
+exports.getPlayerTeam = async (req, res) => {
+  const playerId = parseInt(req.params.id);
+  
+  try {
+    // Get the player with team information
+    const player = await playerModel.getPlayerWithTeam(playerId);
+    
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    
+    // If the player has a team_id, get the team details
+    let team = null;
+    if (player.team_id) {
+      team = await teamModel.getTeamById(player.team_id);
+    }
+    
+    res.json({
+      player,
+      team
+    });
+  } catch (error) {
+    console.error('Error getting player team:', error);
+    res.status(500).json({ error: 'Failed to get player team details' });
+  }
+};
+
+// Show player management page
+exports.showPlayerManagement = async (req, res) => {
+  try {
+    console.log('Loading player management page...');
+    
+    // Check if we're using the mock database
+    if (db.isMockDb()) {
+      console.log('Using mock database for player management');
+    }
+    
+    let teams = [];
+    let players = [];
+    
+    try {
+      teams = await teamModel.getAllTeams();
+      console.log(`Retrieved ${teams.length} teams`);
+    } catch (teamError) {
+      console.error('Error fetching teams:', teamError);
+      teams = []; // Set to empty array to prevent template issues
+    }
+    
+    try {
+      players = await playerModel.getAllPlayers();
+      console.log(`Retrieved ${players.length} players`);
+    } catch (playerError) {
+      console.error('Error fetching players:', playerError);
+      players = []; // Set to empty array to prevent template issues
+    }
+    
+    res.render('player_management', { 
+      title: 'Player Management',
+      teams,
+      players,
+      adminUsername: req.session.adminUsername || null,
+      usingMockDb: db.isMockDb()
+    });
+  } catch (error) {
+    console.error('Error loading player management page:', error);
+    res.status(500).send('Error loading player management page: ' + error.message);
   }
 };
   

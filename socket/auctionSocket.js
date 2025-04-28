@@ -75,7 +75,13 @@ const emitAuctionStatus = (statusObj) => {
     
     // Include current player info if it exists
     if (statusObj.currentPlayer) {
-      normalizedStatus.currentPlayer = statusObj.currentPlayer;
+      normalizedStatus.currentPlayer = {
+        id: statusObj.currentPlayer.id || statusObj.currentPlayer._id,
+        name: statusObj.currentPlayer.name,
+        role: statusObj.currentPlayer.role,
+        basePrice: statusObj.currentPlayer.basePrice || statusObj.currentPlayer.base_price,
+        image: statusObj.currentPlayer.image_url || statusObj.currentPlayer.image
+      };
     }
     
     // Add timestamp to help clients calculate elapsed time
@@ -84,14 +90,23 @@ const emitAuctionStatus = (statusObj) => {
     // Make sure we include correct timer information
     if (normalizedStatus.isWaiting) {
       normalizedStatus.timerType = 'waiting';
-      // We'll rely on getRemainingWaitingTime from the timerManager
+      normalizedStatus.timeRemaining = timerManager.getRemainingWaitingTime();
     } else if (normalizedStatus.isRunning && !normalizedStatus.isPaused) {
       normalizedStatus.timerType = 'bidding';
-      // We'll rely on getRemainingBidTime from the timerManager
+      normalizedStatus.timeRemaining = timerManager.getRemainingBidTime();
     }
     
     if (io) {
       io.to('auction').emit('auction-status', normalizedStatus);
+      
+      console.log('Emitted auction status:', {
+        status: normalizedStatus.status,
+        isRunning: normalizedStatus.isRunning,
+        isPaused: normalizedStatus.isPaused,
+        isWaiting: normalizedStatus.isWaiting,
+        currentPlayer: normalizedStatus.currentPlayer?.name,
+        timeRemaining: normalizedStatus.timeRemaining
+      });
     } else {
       console.warn('IO not initialized when attempting to emit auction status');
     }
@@ -122,8 +137,61 @@ const emitTimerStatus = (timerType, status, timeRemaining) => {
 
 // Emit player updates to all connected clients
 const emitPlayerUpdate = (data) => {
-  if (!io) return;
-  io.to('auction').emit('player-update', data);
+  try {
+    const { player, highestBid, highestBidder } = data;
+    
+    if (!player) {
+      console.error('No player data provided to emitPlayerUpdate');
+      return;
+    }
+    
+    // Format player data consistently
+    const formattedPlayer = {
+      id: player.id || player._id,
+      name: player.name,
+      role: player.role,
+      basePrice: player.base_price || player.basePrice,
+      image: player.image_url || player.image,
+      team: player.team,
+      status: player.status
+    };
+
+    // Create update object with all necessary information
+    const updateData = {
+      player: formattedPlayer,
+      highestBid: highestBid || formattedPlayer.basePrice || 0,
+      highestBidder: highestBidder || null,
+      timestamp: new Date().toISOString()
+    };
+
+    // Emit to all connected clients in the auction room
+    if (io) {
+      // Emit player update event
+      io.to('auction').emit('playerUpdate', updateData);
+      
+      // Also emit auction status update with current player info
+      emitAuctionStatus({
+        isRunning: true,
+        isPaused: false,
+        isWaiting: false,
+        status: 'running',
+        currentPlayer: formattedPlayer,
+        timeRemaining: timerManager.getRemainingBidTime(),
+        message: `Current player: ${formattedPlayer.name}`
+      });
+
+      console.log('Emitted player update:', {
+        playerId: formattedPlayer.id,
+        playerName: formattedPlayer.name,
+        highestBid: updateData.highestBid,
+        highestBidder: updateData.highestBidder?.name || 'None'
+      });
+    } else {
+      console.warn('IO not initialized when attempting to emit player update');
+    }
+  } catch (error) {
+    console.error('Error in emitPlayerUpdate:', error);
+  }
 };
 
 // Emit auction result (sold or unsold) to all connected clients

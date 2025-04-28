@@ -196,21 +196,12 @@ exports.validateStartAuction = (req, res, next) => {
     isPaused: auctionState.isPaused
   });
   
-  // Check if auction is already running
-  if (auctionState.isRunning) {
+  // Check if auction is already running and not paused
+  if (auctionState.isRunning && !auctionState.isPaused) {
     return res.status(400).json({
       success: false,
       error: 'Auction is already running',
       status: 'running'
-    });
-  }
-  
-  // Check if auction is paused
-  if (auctionState.isPaused) {
-    return res.status(400).json({
-      success: false,
-      error: 'Auction is paused. Please resume the auction instead.',
-      status: 'paused'
     });
   }
   
@@ -225,7 +216,7 @@ exports.validateStartAuction = (req, res, next) => {
   // Log action
   logAdminAction({
     type: 'start_auction',
-    message: 'Auction started',
+    message: auctionState.isPaused ? 'Auction resumed' : 'Auction started',
     user: req.adminUser,
     details: {
       auctionStatus: {

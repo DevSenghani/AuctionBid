@@ -37,67 +37,98 @@ function notifyAllClients(actionType, message, details = {}) {
 // Start auction
 exports.startAuction = async (req, res) => {
   try {
-    console.log('Admin attempting to start auction...');
-    
-    // Check if auction is already running
-    if (auctionState.isRunning) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Auction is already running',
-        status: 'running'
-      });
-    }
-    
-    // Check if auction is paused
-    if (auctionState.isPaused) {
-      console.log('Auction is paused, redirecting to resume function');
-      // Call the resume function directly since auction is paused
-      return this.resumeAuction(req, res);
-    }
+    console.log('Admin attempting to start/resume auction...');
     
     // Get admin username from the session or request
     const adminUsername = req.adminUser?.username || req.session?.adminUsername || 'Admin';
-    console.log(`Admin ${adminUsername} is starting the auction`);
+    console.log(`Admin ${adminUsername} is ${auctionState.isPaused ? 'resuming' : 'starting'} the auction`);
     
-    // Start the auction using the state management function
-    startAuctionState();
-    
-    // Start waiting timer for next player
-    timerManager.startWaitingTimer(() => {
-      fetchNextPlayer();
-    });
-    
-    // Create a detailed status object for socket clients
-    const statusObj = {
-      isRunning: auctionState.isRunning,
-      isPaused: auctionState.isPaused,
-      isWaiting: auctionState.isWaiting,
-      status: 'waiting',
-      timeRemaining: timerManager.getRemainingWaitingTime(),
-      message: 'Auction has started. Selecting first player...',
-      startTime: auctionState.startTime
-    };
-    
-    // Emit the detailed status to all clients
-    auctionSocket.emitAuctionStatus(statusObj);
-    
-    // Notify all clients about the auction start
-    notifyAllClients('start_auction', 
-      `Auction has been started by admin ${adminUsername}`,
-      { startTime: auctionState.startTime }
-    );
-    
-    return res.status(200).json({ 
-      success: true,
-      message: 'Auction started successfully', 
-      status: 'running',
-      timeRemaining: timerManager.getRemainingWaitingTime()
-    });
+    if (auctionState.isPaused) {
+      // Resume the auction
+      auctionState.isPaused = false;
+      
+      // Resume timers with their remaining time
+      timerManager.resumeAllTimers();
+      
+      // Create a detailed status object for socket clients
+      const statusObj = {
+        isRunning: true,
+        isPaused: false,
+        isWaiting: auctionState.isWaiting,
+        status: auctionState.isWaiting ? 'waiting' : 'running',
+        timeRemaining: auctionState.isWaiting ? 
+                      timerManager.getRemainingWaitingTime() : 
+                      timerManager.getRemainingBidTime(),
+        message: 'Auction has been resumed',
+        startTime: auctionState.startTime
+      };
+      
+      // Include current player info if available
+      if (auctionState.currentPlayer) {
+        statusObj.currentPlayer = {
+          id: auctionState.currentPlayer.id || auctionState.currentPlayer._id,
+          name: auctionState.currentPlayer.name,
+          role: auctionState.currentPlayer.role,
+          basePrice: auctionState.currentPlayer.basePrice || auctionState.currentPlayer.base_price
+        };
+      }
+      
+      // Emit the detailed status to all clients
+      auctionSocket.emitAuctionStatus(statusObj);
+      
+      // Notify all clients about the auction resume
+      notifyAllClients('resume_auction', 
+        `Auction has been resumed by admin ${adminUsername}`,
+        { resumeTime: new Date() }
+      );
+      
+      return res.status(200).json({ 
+        success: true,
+        message: 'Auction resumed successfully', 
+        status: 'running',
+        timeRemaining: statusObj.timeRemaining
+      });
+    } else {
+      // Start new auction
+      startAuctionState();
+      
+      // Start waiting timer for next player
+      timerManager.startWaitingTimer(() => {
+        fetchNextPlayer();
+      });
+      
+      // Create a detailed status object for socket clients
+      const statusObj = {
+        isRunning: true,
+        isPaused: false,
+        isWaiting: true,
+        status: 'waiting',
+        timeRemaining: timerManager.getRemainingWaitingTime(),
+        message: 'Auction has started. Selecting first player...',
+        startTime: auctionState.startTime
+      };
+      
+      // Emit the detailed status to all clients
+      auctionSocket.emitAuctionStatus(statusObj);
+      
+      // Notify all clients about the auction start
+      notifyAllClients('start_auction', 
+        `Auction has been started by admin ${adminUsername}`,
+        { startTime: auctionState.startTime }
+      );
+      
+      return res.status(200).json({ 
+        success: true,
+        message: 'Auction started successfully', 
+        status: 'running',
+        timeRemaining: timerManager.getRemainingWaitingTime()
+      });
+    }
   } catch (error) {
-    console.error('Error starting auction:', error);
+    console.error('Error starting/resuming auction:', error);
     return res.status(500).json({ 
       success: false,
-      message: 'Error starting auction',
+      message: 'Error starting/resuming auction',
       error: error.message
     });
   }

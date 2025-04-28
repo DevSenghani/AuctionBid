@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player Management - Cricket Auction</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .card {
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .card-header {
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      font-weight: 600;
+    }
+    
+    .player-row:hover {
+      background-color: #f8f9fa;
+    }
+    
+    .table th {
+      background-color: #f1f1f1;
+    }
+    
+    .badge {
+      font-weight: 500;
+      padding: 0.4em 0.6em;
+    }
+    
+    /* Role colors and styles */
+    .role-batsman {
+      color: #e74c3c;
+      font-weight: 600;
+    }
+    
+    .role-bowler {
+      color: #27ae60;
+      font-weight: 600;
+    }
+    
+    .role-all-rounder {
+      color: #f39c12;
+      font-weight: 600;
+    }
+    
+    .role-wicket-keeper {
+      color: #3498db;
+      font-weight: 600;
+    }
+    
+    .role-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      margin-right: 6px;
+      font-size: 12px;
+    }
+    
+    .role-icon-batsman {
+      background-color: rgba(231, 76, 60, 0.15);
+      color: #e74c3c;
+    }
+    
+    .role-icon-bowler {
+      background-color: rgba(39, 174, 96, 0.15);
+      color: #27ae60;
+    }
+    
+    .role-icon-all-rounder {
+      background-color: rgba(243, 156, 18, 0.15);
+      color: #f39c12;
+    }
+    
+    .role-icon-wicket-keeper {
+      background-color: rgba(52, 152, 219, 0.15);
+      color: #3498db;
+    }
+    
+    /* Status badges */
+    .status-sold {
+      background-color: #28a745;
+    }
+    
+    .status-unsold {
+      background-color: #dc3545;
+    }
+    
+    .status-available {
+      background-color: #fd7e14;
+    }
+    
+    /* Section divider */
+    .section-divider {
+      margin: 2rem 0;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.1), transparent);
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/home">Cricket Auction</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/admin">Admin</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" href="/admin/players">Manage Players</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/admin">Manage Teams</a>
+          </li>
+        </ul>
+        <ul class="navbar-nav">
+          <% if (typeof adminUsername !== 'undefined') { %>
+            <li class="nav-item">
+              <span class="nav-link">
+                <i class="fas fa-user-shield me-1"></i>Admin: <%= adminUsername %>
+              </span>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/logout">
+                <i class="fas fa-sign-out-alt me-1"></i>Logout
+              </a>
+            </li>
+          <% } else { %>
+            <li class="nav-item">
+              <a class="btn btn-primary btn-sm" href="/admin/login">Admin Login</a>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h1 class="mb-4"><i class="fas fa-users me-2"></i>Player Management</h1>
+    
+    <% if (typeof usingMockDb !== 'undefined' && usingMockDb) { %>
+      <div class="alert alert-warning">
+        <strong>Note:</strong> Database connection could not be established. Using mock data for demonstration.
+      </div>
+    <% } %>
+    
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Add New Player</h5>
+          </div>
+          <div class="card-body">
+            <form id="player-form" class="mb-3">
+              <div class="mb-3">
+                <label for="player-name" class="form-label">Player Name</label>
+                <input type="text" class="form-control" id="player-name" required>
+              </div>
+              <div class="mb-3">
+                <label for="player-role" class="form-label">Role</label>
+                <select class="form-select" id="player-role" required>
+                  <option value="">Select a role</option>
+                  <option value="Batsman">Batsman</option>
+                  <option value="Bowler">Bowler</option>
+                  <option value="All-Rounder">All-Rounder</option>
+                  <option value="Wicket-Keeper">Wicket-Keeper</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="player-base-price" class="form-label">Base Price</label>
+                <input type="number" class="form-control" id="player-base-price" value="200000" required>
+              </div>
+              <div class="mb-3">
+                <label for="player-image-url" class="form-label">Player Image URL</label>
+                <input type="url" class="form-control" id="player-image-url" placeholder="https://example.com/player-image.jpg">
+                <small class="form-text text-muted">Link to player's profile image (optional)</small>
+              </div>
+              <div class="mb-3">
+                <label for="player-team" class="form-label">Team (Optional)</label>
+                <select class="form-select" id="player-team">
+                  <option value="">No Team (Available for Auction)</option>
+                  <% if (teams && teams.length > 0) { %>
+                    <% teams.forEach(team => { %>
+                      <option value="<%= team.id %>"><%= team.name %></option>
+                    <% }) %>
+                  <% } %>
+                </select>
+              </div>
+              <div class="mb-3" id="player-sold-price-container" style="display: none;">
+                <label for="player-sold-price" class="form-label">Sold Price</label>
+                <input type="number" class="form-control" id="player-sold-price" value="0">
+              </div>
+              <button type="submit" class="btn btn-success">Add Player</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Player Search & Filters</h5>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <input type="text" class="form-control" id="player-search" placeholder="Search players by name...">
+              </div>
+              <div class="col-md-4">
+                <select class="form-select" id="player-filter">
+                  <option value="all">All Players</option>
+                  <option value="available">Available</option>
+                  <option value="sold">Sold</option>
+                  <option value="unsold">Unsold</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between">
+              <div class="text-muted">
+                <i class="fas fa-info-circle me-1"></i>Total: <span id="player-count"><%= players ? players.length : 0 %></span> players
+              </div>
+              <button class="btn btn-sm btn-outline-primary" id="refresh-players">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">Bulk Import/Export</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="d-grid">
+                  <button class="btn btn-outline-success mb-2" id="export-players-btn">
+                    <i class="fas fa-file-export me-1"></i>Export Players (CSV)
+                  </button>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary mb-2" id="import-players-btn">
+                    <i class="fas fa-file-import me-1"></i>Import Players (CSV)
+                  </button>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="import-csv" accept=".csv" style="display: none;">
+            <small class="text-muted mt-2 d-block">
+              <i class="fas fa-info-circle me-1"></i>Export current players or import new players from CSV file.
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card mb-4">
+          <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Existing Players</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Base Price</th>
+                    <th>Team</th>
+                    <th>Sold Price</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="players-table-body">
+                  <% if (players && players.length > 0) { %>
+                    <% players.forEach(player => { %>
+                      <tr class="player-row" data-status="<%= player.team_id ? 'sold' : (player.status === 'unsold' ? 'unsold' : 'available') %>">
+                        <td><%= player.name %></td>
+                        <td>
+                          <% 
+                            let roleClass = '';
+                            let roleIconClass = '';
+                            let roleIcon = '';
+                            let displayRole = player.role;
+                            
+                            if (player.role === 'Batsman') {
+                              roleClass = 'role-batsman';
+                              roleIconClass = 'role-icon-batsman';
+                              roleIcon = 'fas fa-baseball-ball';
+                            } else if (player.role === 'Bowler') {
+                              roleClass = 'role-bowler';
+                              roleIconClass = 'role-icon-bowler';
+                              roleIcon = 'fas fa-bowling-ball';
+                            } else if (player.role === 'All-rounder' || player.role === 'All-Rounder' || player.role === 'all-rounder') {
+                              roleClass = 'role-all-rounder';
+                              roleIconClass = 'role-icon-all-rounder';
+                              roleIcon = 'fas fa-running';
+                              displayRole = 'All-Rounder';
+                            } else if (player.role === 'Wicket-keeper' || player.role === 'Wicket-Keeper' || player.role === 'wicket-keeper') {
+                              roleClass = 'role-wicket-keeper';
+                              roleIconClass = 'role-icon-wicket-keeper';
+                              roleIcon = 'fas fa-hands';
+                              displayRole = 'Wicket-Keeper';
+                            } else {
+                              roleIcon = 'fas fa-user';
+                            }
+                          %>
+                          <span class="<%= roleClass %>">
+                            <span class="role-icon <%= roleIconClass %>">
+                              <i class="<%= roleIcon %>"></i>
+                            </span>
+                            <%= displayRole %>
+                          </span>
+                        </td>
+                        <td><%= typeof player.base_price !== 'undefined' ? player.base_price.toLocaleString() : '0' %></td>
+                        <td>
+                          <% if (player.team_id) { %>
+                            <span class="badge bg-success">
+                              <i class="fas fa-users me-1"></i>
+                              <% if (player.team_name) { %>
+                                <%= player.team_name %>
+                              <% } else { %>
+                                Loading team...
+                              <% } %>
+                            </span>
+                          <% } else { %>
+                            <span class="badge bg-secondary">Unsold</span>
+                          <% } %>
+                        </td>
+                        <td>
+                          <% if (player.sold_amount) { %>
+                            <span class="badge bg-primary">
+                              <i class="fas fa-rupee-sign me-1"></i><%= player.sold_amount.toLocaleString() %>
+                            </span>
+                          <% } else if (player.team_id) { %>
+                            <span class="badge bg-info">
+                              <i class="fas fa-rupee-sign me-1"></i><%= player.base_price.toLocaleString() %>
+                            </span>
+                          <% } else { %>
+                            <span class="badge bg-secondary">-</span>
+                          <% } %>
+                        </td>
+                        <td>
+                          <% if (player.team_id) { %>
+                            <button class="btn btn-sm btn-warning reset-player-btn" data-player-id="<%= player.id %>">Reset</button>
+                          <% } else { %>
+                            <button class="btn btn-sm btn-primary assign-player-btn" data-player-id="<%= player.id %>" data-player-name="<%= player.name %>">Assign</button>
+                            <button class="btn btn-sm btn-success start-player-auction-btn" data-player-id="<%= player.id %>" data-player-name="<%= player.name %>">
+                              <i class="fas fa-gavel me-1"></i>Start Auction
+                            </button>
+                          <% } %>
+                          <button class="btn btn-sm btn-info edit-player-btn" data-player-id="<%= player.id %>" 
+                            data-player-name="<%= player.name %>" 
+                            data-player-role="<%= player.role %>" 
+                            data-player-base-price="<%= player.base_price %>"
+                            data-player-image-url="<%= player.image_url || '' %>"
+                            data-player-status="<%= player.status %>">
+                            <i class="fas fa-edit me-1"></i>Edit
+                          </button>
+                          <button class="btn btn-sm btn-danger delete-player-btn" data-player-id="<%= player.id %>">Delete</button>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  <% } else { %>
+                    <tr>
+                      <td colspan="6" class="text-center">No players available</td>
+                    </tr>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for assigning player to team -->
+  <div class="modal fade" id="assignPlayerModal" tabindex="-1" aria-labelledby="assignPlayerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="assignPlayerModalLabel">Assign Player to Team</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="assign-player-form">
+            <input type="hidden" id="assign-player-id">
+            <div class="mb-3">
+              <label for="assign-team" class="form-label">Select Team</label>
+              <select class="form-select" id="assign-team" required>
+                <option value="">Select a team</option>
+                <% if (teams && teams.length > 0) { %>
+                  <% teams.forEach(team => { %>
+                    <option value="<%= team.id %>"><%= team.name %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="assign-price" class="form-label">Sold Price</label>
+              <input type="number" class="form-control" id="assign-price" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-assign-btn">Assign Player</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for editing player -->
+  <div class="modal fade" id="editPlayerModal" tabindex="-1" aria-labelledby="editPlayerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editPlayerModalLabel">Edit Player</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-player-form">
+            <input type="hidden" id="edit-player-id">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="edit-player-name" class="form-label">Player Name</label>
+                  <input type="text" class="form-control" id="edit-player-name" required>
+                </div>
+                <div class="mb-3">
+                  <label for="edit-player-role" class="form-label">Role</label>
+                  <select class="form-select" id="edit-player-role" required>
+                    <option value="">Select a role</option>
+                    <option value="Batsman">Batsman</option>
+                    <option value="Bowler">Bowler</option>
+                    <option value="All-Rounder">All-Rounder</option>
+                    <option value="Wicket-Keeper">Wicket-Keeper</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="edit-player-base-price" class="form-label">Base Price</label>
+                  <input type="number" class="form-control" id="edit-player-base-price" required>
+                </div>
+                <div class="mb-3">
+                  <label for="edit-player-image-url" class="form-label">Player Image URL</label>
+                  <input type="url" class="form-control" id="edit-player-image-url">
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-edit-btn">Update Player</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import CSV Modal -->
+  <div class="modal fade" id="importCsvModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Import Players from CSV</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <strong>CSV Format:</strong> The file should have columns for name, role, and base_price.
+          </div>
+          <div class="mb-3">
+            <label for="csv-file" class="form-label">Select CSV File</label>
+            <input type="file" class="form-control" id="csv-file" accept=".csv">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="import-csv-btn">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/player-management.js"></script>
+</body>
+</html> 

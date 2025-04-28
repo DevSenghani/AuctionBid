@@ -31,23 +31,46 @@ exports.getPlayerById = async (id) => {
 
 // Get player by ID with team information joined
 exports.getPlayerWithTeam = async (id) => {
+  if (!id || isNaN(id)) {
+    console.error('Invalid player ID provided:', id);
+    return null;
+  }
+
   try {
     console.log(`Fetching player with ID ${id} including team information...`);
     const result = await db.query(
-      `SELECT p.*, t.name as team_name, t.owner as team_owner 
+      `SELECT 
+        p.*,
+        t.name as team_name,
+        t.owner as team_owner,
+        t.budget as team_budget,
+        CASE 
+          WHEN p.team_id IS NOT NULL THEN 'sold'
+          WHEN p.status = 'in_auction' THEN 'in_auction'
+          ELSE 'unsold'
+        END as auction_status
        FROM players p 
        LEFT JOIN teams t ON p.team_id = t.id 
        WHERE p.id = $1`,
       [id]
     );
+
     if (result.rows.length === 0) {
       console.log(`No player found with ID ${id}`);
       return null;
     }
-    return result.rows[0];
+
+    const player = result.rows[0];
+    return {
+      ...player,
+      base_price: parseFloat(player.base_price) || 0,
+      sold_price: parseFloat(player.sold_price) || 0,
+      team_budget: parseFloat(player.team_budget) || 0
+    };
   } catch (error) {
     console.error(`Error fetching player with team for ID ${id}:`, error);
-    return null; // Return null instead of throwing
+    console.error('Error details:', error.message);
+    return null;
   }
 };
 
@@ -56,13 +79,32 @@ exports.getAvailablePlayers = async () => {
   try {
     console.log('Fetching available players (without team)...');
     const result = await db.query(
-      'SELECT * FROM players WHERE team_id IS NULL ORDER BY name'
+      `SELECT 
+        p.*,
+        COALESCE(MAX(b.amount), p.base_price) as current_bid
+       FROM players p
+       LEFT JOIN bids b ON p.id = b.player_id
+       WHERE p.team_id IS NULL 
+         AND p.status != 'sold'
+       GROUP BY p.id
+       ORDER BY 
+         CASE 
+           WHEN p.status = 'in_auction' THEN 0
+           ELSE 1
+         END,
+         p.role,
+         p.name`
     );
-    console.log(`Found ${result.rows.length} available players`);
-    return result.rows;
+
+    return result.rows.map(player => ({
+      ...player,
+      base_price: parseFloat(player.base_price) || 0,
+      current_bid: parseFloat(player.current_bid) || 0
+    }));
   } catch (error) {
     console.error('Error fetching available players:', error);
-    return []; // Return empty array instead of throwing
+    console.error('Error details:', error.message);
+    return [];
   }
 };
 
@@ -98,20 +140,47 @@ exports.createPlayer = async (playerData) => {
 };
 
 // Update a player
-exports.updatePlayer = async (id, playerData) => {
-  const { name, base_price, role, team_id, image_url } = playerData;
+exports.updatePlayer = async (playerId, playerData) => {
   try {
-    const result = await db.query(
-      'UPDATE players SET name = $1, base_price = $2, role = $3, team_id = $4, image_url = $5 WHERE id = $6 RETURNING *',
-      [name, base_price, role, team_id, image_url, id]
-    );
-    if (result.rows.length === 0) {
-      throw new Error('Player not found');
+    const { name, role, base_price, image_url, status } = playerData;
+
+    // Validate required fields
+    if (!name || !role || !base_price) {
+      throw new Error('Name, role, and base price are required');
     }
+
+    // Validate status if provided
+    if (status && !['available', 'sold', 'unsold'].includes(status)) {
+      throw new Error('Invalid status value. Must be one of: available, sold, unsold');
+    }
+
+    const query = `
+      UPDATE players 
+      SET name = $1, role = $2, base_price = $3, image_url = $4, status = $5
+      WHERE id = $6
+      RETURNING *
+    `;
+
+    const values = [
+      name,
+      role,
+      base_price,
+      image_url || null,
+      status || 'available',
+      playerId
+    ];
+
+    const result = await db.query(query, values);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
     return result.rows[0];
+
   } catch (error) {
-    console.error(`Error updating player with ID ${id}:`, error);
-    throw error; // Rethrow for handling in controller
+    console.error('Error updating player:', error);
+    throw error;
   }
 };
 
@@ -217,5 +286,67 @@ exports.resetAllPlayerStatus = async () => {
   } catch (error) {
     console.error('Error resetting player statuses:', error);
     throw error; // Rethrow for handling in controller
+  }
+};
+
+// Update player's team assignment
+exports.assignPlayerToTeam = async (playerId, teamId, soldPrice) => {
+  if (!playerId || isNaN(playerId)) {
+    throw new Error('Invalid player ID');
+  }
+
+  if (!teamId || isNaN(teamId)) {
+    throw new Error('Invalid team ID');
+  }
+
+  if (!soldPrice || isNaN(soldPrice) || soldPrice < 0) {
+    throw new Error('Invalid sold price');
+  }
+
+  try {
+    // Start a transaction
+    await db.query('BEGIN');
+
+    // Check if team has enough budget
+    const teamResult = await db.query(
+      'SELECT budget, total_spent FROM teams WHERE id = $1',
+      [teamId]
+    );
+
+    if (teamResult.rows.length === 0) {
+      throw new Error('Team not found');
+    }
+
+    const team = teamResult.rows[0];
+    const currentBudget = parseFloat(team.budget) - (parseFloat(team.total_spent) || 0);
+
+    if (currentBudget < soldPrice) {
+      throw new Error('Team does not have enough budget');
+    }
+
+    // Update player
+    const result = await db.query(
+      `UPDATE players 
+       SET team_id = $1,
+           sold_price = $2,
+           status = 'sold',
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [teamId, soldPrice, playerId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Player not found');
+    }
+
+    // Commit transaction
+    await db.query('COMMIT');
+
+    return result.rows[0];
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error('Error assigning player to team:', error);
+    throw error;
   }
 };
