@@ -8,7 +8,7 @@ module.exports = {
   jwtExpiry: '1d',
   
   // Server configuration
-  port: process.env.PORT || 3000,
+  port: process.env.PORT || 3001,
   
   // Auction configuration
   auction: {

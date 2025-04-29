@@ -246,10 +246,10 @@
                       <h5 class="mb-0"><%= team.name %></h5>
                       <div class="team-budget">
                         <span class="badge bg-primary">
-                          <i class="fas fa-wallet me-1"></i>Budget:₹<%= typeof teams.budget !== 'undefined' ? team.budget.toLocaleString() : '0' %>
+                          <i class="fas fa-wallet me-1"></i>Budget:₹<%= typeof teams.budget !== 'undefined' ? teams.budget.toLocaleString() : '0' %>
                         </span>
                         <span class="badge bg-secondary ms-2">
-                          <i class="fas fa-users me-1"></i>Players: <%= team.player_count || 0 %>
+                          <i class="fas fa-users me-1"></i>Players: <%= teams.player_count || 0 %>
                         </span>
                       </div>
                     </div>

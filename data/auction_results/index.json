@@ -154,5 +154,29 @@
     "teamsParticipated": [],
     "reason": "Auction completed",
     "createdAt": "2025-04-28T18:11:09.185Z"
+  },
+  {
+    "id": "1745909477430",
+    "endTime": "2025-04-29T06:51:17.413Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-04-29T06:51:17.430Z"
+  },
+  {
+    "id": "1745913476778",
+    "endTime": "2025-04-29T07:57:56.775Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-04-29T07:57:56.778Z"
   }
 ]

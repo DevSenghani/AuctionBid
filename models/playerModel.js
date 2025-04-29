@@ -46,7 +46,7 @@ exports.getPlayerWithTeam = async (id) => {
         t.budget as team_budget,
         CASE 
           WHEN p.team_id IS NOT NULL THEN 'sold'
-          WHEN p.status = 'in_auction' THEN 'in_auction'
+          WHEN p.status @> ARRAY['in_auction']::varchar[] THEN 'in_auction'
           ELSE 'unsold'
         END as auction_status
        FROM players p 
@@ -85,11 +85,11 @@ exports.getAvailablePlayers = async () => {
        FROM players p
        LEFT JOIN bids b ON p.id = b.player_id
        WHERE p.team_id IS NULL 
-         AND p.status != 'sold'
+         AND NOT (p.status @> ARRAY['sold']::varchar[])
        GROUP BY p.id
        ORDER BY 
          CASE 
-           WHEN p.status = 'in_auction' THEN 0
+           WHEN p.status @> ARRAY['in_auction']::varchar[] THEN 0
            ELSE 1
          END,
          p.role,
@@ -154,6 +154,9 @@ exports.updatePlayer = async (playerId, playerData) => {
       throw new Error('Invalid status value. Must be one of: available, sold, unsold');
     }
 
+    // Since status is defined as character varying[] (array), convert string to array
+    const statusArray = status ? (Array.isArray(status) ? status : [status]) : ['available'];
+
     const query = `
       UPDATE players 
       SET name = $1, role = $2, base_price = $3, image_url = $4, status = $5
@@ -166,7 +169,7 @@ exports.updatePlayer = async (playerId, playerData) => {
       role,
       base_price,
       image_url || null,
-      status || 'available',
+      statusArray,
       playerId
     ];
 
@@ -329,11 +332,11 @@ exports.assignPlayerToTeam = async (playerId, teamId, soldPrice) => {
       `UPDATE players 
        SET team_id = $1,
            sold_price = $2,
-           status = 'sold',
+           status = $3,
            updated_at = NOW()
-       WHERE id = $3
+       WHERE id = $4
        RETURNING *`,
-      [teamId, soldPrice, playerId]
+      [teamId, soldPrice, ['sold'], playerId]
     );
 
     if (result.rows.length === 0) {

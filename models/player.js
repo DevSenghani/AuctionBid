@@ -50,7 +50,7 @@ class Player {
       }
       
       if (conditions.status) {
-        query += ` AND status = $${params.length + 1}`;
+        query += ` AND status @> ARRAY[$${params.length + 1}]::varchar[]`;
         params.push(conditions.status);
       }
       
@@ -86,7 +86,7 @@ class Player {
       }
       
       if (conditions.status) {
-        query += ` AND status = $${params.length + 1}`;
+        query += ` AND status @> ARRAY[$${params.length + 1}]::varchar[]`;
         params.push(conditions.status);
       }
       

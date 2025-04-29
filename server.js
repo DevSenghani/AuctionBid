@@ -2,19 +2,61 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const app = express();
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
 require('dotenv').config();
+
+// Load centralized configuration
+const config = require('./config/auctionConfig');
+
+// Load custom logger
+const logger = require('./utils/logger');
 
 // Set EJS as the view engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Apply security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "code.jquery.com", "cdnjs.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "fonts.googleapis.com", "cdnjs.cloudflare.com"],
+      imgSrc: ["'self'", "data:", "cdn.jsdelivr.net", "secure.gravatar.com"],
+      fontSrc: ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+    }
+  },
+  xssFilter: true,
+  noSniff: true,
+  hsts: {
+    maxAge: 15552000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// Add compression for better performance
+app.use(compression());
+
+// Add request logging with morgan - output to both console and log file
+app.use(morgan(config.server.environment === 'production' ? 'combined' : 'dev', {
+  stream: {
+    write: (message) => {
+      logger.debug(message.trim());
+    }
+  }
+}));
+
 // Configure session middleware
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'cricket-auction-secret',
+  secret: config.server.sessionSecret,
   resave: false,
   saveUninitialized: true,
   cookie: { 
-    secure: process.env.NODE_ENV === 'production',
+    secure: config.server.environment === 'production',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
@@ -100,46 +142,91 @@ app.use('/results', require('./routes/resultsRoutes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Application error:', err.stack);
+  logger.error('Application error', {
+    message: err.message,
+    stack: err.stack,
+    url: req.originalUrl,
+    method: req.method,
+    ip: req.ip
+  });
   res.status(500).send(`Something broke! Error: ${err.message}`);
 });
 
 // 404 handler for undefined routes
 app.use((req, res) => {
+  logger.warn(`404 Not Found: ${req.method} ${req.originalUrl}`, {
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
   res.status(404).render('404', { title: 'Page Not Found' });
 });
 
-// Start the server - try port 3001 if 3000 is in use
-const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-}).on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.log(`Port ${PORT} is busy, trying port ${PORT + 1}`);
-    const newPort = PORT + 1;
-    server.close();
-    app.listen(newPort, () => {
-      console.log(`Server running on port ${newPort}`);
+// Start the server with better error handling
+const PORT = config.server.port;
+let server;
+
+try {
+  server = app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`, {
+      environment: config.server.environment,
+      nodeVersion: process.version
     });
-  } else {
-    console.error('Server startup error:', err);
+  });
+  
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.warn(`Port ${PORT} is busy, trying port ${PORT + 1}`);
+      const newPort = PORT + 1;
+      server.close();
+      server = app.listen(newPort, () => {
+        logger.info(`Server running on port ${newPort}`);
+      });
+    } else {
+      logger.error('Server startup error', { error: err.message, stack: err.stack });
+      process.exit(1); // Exit with error code
+    }
+  });
+} catch (error) {
+  logger.error('Failed to start server', { error: error.message, stack: error.stack });
+  process.exit(1);
+}
+
+// Initialize Socket.IO with proper error handling
+const socketIO = require('socket.io');
+const io = socketIO(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' ? false : '*',
+    methods: ['GET', 'POST']
   }
 });
 
-// Initialize Socket.IO
+// Initialize socket modules
 const auctionSocket = require('./socket/auctionSocket');
 const bidSocket = require('./socket/bidSocket');
-const socketIO = require('socket.io');
 
-// Initialize Socket.IO with a single instance
-const io = socketIO(server);
-auctionSocket.init(io); // Pass io instance instead of server
-bidSocket(io);  // Pass the same io instance
+// Set up error handling for Socket.IO
+io.on('error', (error) => {
+  console.error('Socket.IO error:', error);
+});
+
+// Initialize socket modules with the io instance
+try {
+  auctionSocket.init(io);
+  bidSocket(io);
+  console.log('Socket.IO initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize Socket.IO modules:', error);
+}
 
 // Set up periodic database connection check (every 5 minutes)
-const DB_HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const DB_HEALTH_CHECK_INTERVAL = config.database.healthCheckInterval;
 setInterval(async () => {
   try {
+    // Skip health checks if mock mode is explicitly enabled
+    if (config.database.enableMock) {
+      return;
+    }
+    
     console.log('Performing periodic database health check...');
     const status = await db.checkConnection();
     if (!status.connected && status.mode === 'mock') {

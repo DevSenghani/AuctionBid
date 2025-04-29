@@ -105,36 +105,95 @@ exports.placeBid = async (req, res) => {
   try {
     const { teamId, bidAmount } = req.body;
     
+    // Input validation
+    if (!teamId || !bidAmount) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields: teamId and bidAmount are required' 
+      });
+    }
+    
+    // Ensure bidAmount is a number
+    const parsedBidAmount = parseInt(bidAmount, 10);
+    if (isNaN(parsedBidAmount)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Bid amount must be a valid number' 
+      });
+    }
+    
+    // Check auction state
     if (!auctionState.isRunning || auctionState.isPaused) {
-      return res.status(400).json({ message: 'Auction is not active' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Auction is not active' 
+      });
     }
     
     if (!auctionState.currentPlayer) {
-      return res.status(400).json({ message: 'No player currently up for auction' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'No player currently up for auction' 
+      });
     }
     
-    // Validate the bid amount
-    if (bidAmount <= auctionState.highestBid) {
-      return res.status(400).json({ message: 'Bid amount must be higher than current highest bid' });
+    // Ensure bid amount is higher than current highest bid
+    const minBidIncrement = config.auction.minBidIncrement || 1000;
+    if (parsedBidAmount <= auctionState.highestBid) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Bid amount must be higher than current highest bid',
+        currentHighestBid: auctionState.highestBid
+      });
+    }
+    
+    // Ensure bid increment is valid (at least minBidIncrement more than current highest)
+    if (parsedBidAmount < auctionState.highestBid + minBidIncrement) {
+      return res.status(400).json({ 
+        success: false,
+        message: `Bid must be at least ${minBidIncrement} more than current highest bid`,
+        currentHighestBid: auctionState.highestBid,
+        minimumBid: auctionState.highestBid + minBidIncrement
+      });
     }
     
     // Get the team that placed the bid
     const team = await teamModel.getTeamById(teamId);
     if (!team) {
-      return res.status(404).json({ message: 'Team not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Team not found' 
+      });
     }
     
     // Check if team has enough budget
-    if (team.budget < bidAmount) {
-      return res.status(400).json({ message: 'Not enough budget to place this bid' });
+    if (team.budget < parsedBidAmount) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Not enough budget to place this bid',
+        budget: team.budget,
+        bidAmount: parsedBidAmount
+      });
     }
     
     // Log bid information
-    console.log(`Team ${team.name} bid ${bidAmount} for player ${auctionState.currentPlayer.name}`);
+    console.log(`Team ${team.name} bid ${parsedBidAmount} for player ${auctionState.currentPlayer.name}`);
     
-    // Update highest bid
-    auctionState.highestBid = bidAmount;
+    // Update highest bid in auction state
+    auctionState.highestBid = parsedBidAmount;
     auctionState.highestBidder = team;
+    
+    // Save bid to database if applicable
+    try {
+      await bidModel.createBid({
+        player_id: auctionState.currentPlayer.id || auctionState.currentPlayer._id,
+        team_id: team.id || team._id,
+        amount: parsedBidAmount
+      });
+    } catch (dbError) {
+      console.error('Error saving bid to database:', dbError);
+      // Continue even if database save fails - we already updated auction state
+    }
     
     // Emit the update to all clients
     const io = require('../socket/auctionSocket').getIO();
@@ -143,14 +202,17 @@ exports.placeBid = async (req, res) => {
         player_id: auctionState.currentPlayer.id || auctionState.currentPlayer._id,
         team_id: team.id || team._id,
         team_name: team.name,
-        amount: bidAmount,
+        amount: parsedBidAmount,
         timestamp: new Date()
       });
     }
     
     // Reset the bid timer if it's getting low
+    const bidTimeExtension = config.auction.bidTimeExtension || 15;
     const remainingTime = timerManager.getRemainingBidTime();
-    if (remainingTime < 15) { // If less than 15 seconds remaining
+    if (remainingTime < bidTimeExtension) { // If less than X seconds remaining
+      console.log(`Timer extended due to new bid (${remainingTime}s remaining)`);
+      
       // Extend the timer
       timerManager.stopBidTimer();
       timerManager.startBidTimer(() => {
@@ -159,13 +221,19 @@ exports.placeBid = async (req, res) => {
     }
     
     return res.status(200).json({ 
+      success: true,
       message: 'Bid placed successfully',
       highestBid: auctionState.highestBid,
-      highestBidder: team.name
+      highestBidder: team.name,
+      timeRemaining: timerManager.getRemainingBidTime()
     });
   } catch (error) {
     console.error('Error placing bid:', error);
-    return res.status(500).json({ message: 'Failed to place bid', error: error.message });
+    return res.status(500).json({ 
+      success: false,
+      message: 'Failed to place bid',
+      error: error.message 
+    });
   }
 };
 
