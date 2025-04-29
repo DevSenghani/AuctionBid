@@ -36,10 +36,10 @@ const config = {
   // Database configuration
   database: {
     host: process.env.DB_HOST || 'localhost',
-    port: parseIntEnv('DB_PORT', 5432),
+    port: parseIntEnv('DB_PORT', 2507),
     name: process.env.DB_NAME || 'auction_system',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'Manav@2006',
+    password: process.env.DB_PASSWORD || 'd2507',
     connectionTimeout: parseIntEnv('DB_CONNECTION_TIMEOUT', 5000),
     idleTimeout: parseIntEnv('DB_IDLE_TIMEOUT', 30000),
     poolMax: parseIntEnv('DB_POOL_MAX', 20),

@@ -13,8 +13,8 @@ const dbConfig = {
   user: config.database.user || 'postgres',
   host: config.database.host || 'localhost',
   database: config.database.name || 'auction_system',
-  password: config.database.password || '',
-  port: safeNumber(config.database.port, 5432),
+  password: config.database.password || 'd2507',
+  port: safeNumber(config.database.port, 2507),
   connectionTimeoutMillis: safeNumber(config.database.connectionTimeout, 5000),
   idleTimeoutMillis: safeNumber(config.database.idleTimeout, 10000),
   max: safeNumber(config.database.poolMax, 10)

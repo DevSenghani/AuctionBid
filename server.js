@@ -25,7 +25,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "code.jquery.com", "cdnjs.cloudflare.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "fonts.googleapis.com", "cdnjs.cloudflare.com"],
       imgSrc: ["'self'", "data:", "cdn.jsdelivr.net", "secure.gravatar.com"],
-      fontSrc: ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net"],
+      fontSrc: ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
       connectSrc: ["'self'", "ws:", "wss:"],
     }
   },

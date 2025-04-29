@@ -178,5 +178,17 @@
     "teamsParticipated": [],
     "reason": "Auction completed",
     "createdAt": "2025-04-29T07:57:56.778Z"
+  },
+  {
+    "id": "1745943270553",
+    "endTime": "2025-04-29T16:14:30.550Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-04-29T16:14:30.553Z"
   }
 ]
