@@ -6,6 +6,9 @@ const { isTeamAuthenticated } = require('../middleware/authMiddleware');
 // Show auction page - must be logged in to access
 router.get('/', isTeamAuthenticated, auctionController.showAuctionPage);
 
+// Projector view - publicly accessible
+router.get('/projector', auctionController.showProjectorView);
+
 // Get auction status - for polling auction status from the team view
 router.get('/status', auctionController.getAuctionStatus);
 

@@ -632,25 +632,46 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Show alert function
   function showAlert(message, type) {
-    // Create alert element
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.setAttribute('role', 'alert');
-    alertDiv.innerHTML = `
-      ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    // Map alert types to Bootstrap color classes
+    const typeMap = {
+      'success': 'success',
+      'danger': 'danger',
+      'warning': 'warning',
+      'info': 'info',
+      'error': 'danger'
+    };
+    
+    // Get the Bootstrap color class
+    const bsType = typeMap[type] || 'info';
+    
+    // Create toast element
+    const toastContainer = document.querySelector('.toast-container');
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} show`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+      <div class="toast-header bg-${bsType} ${bsType === 'warning' ? 'text-dark' : 'text-white'}">
+        <strong class="me-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+        <button type="button" class="btn-close ${bsType === 'warning' ? '' : 'btn-close-white'}" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body">
+        ${message}
+      </div>
     `;
     
-    // Add to page
-    const container = document.querySelector('.container');
-    container.insertBefore(alertDiv, container.firstChild);
+    // Add to toast container
+    toastContainer.appendChild(toast);
     
     // Auto-dismiss after 5 seconds
     setTimeout(() => {
-      alertDiv.classList.remove('show');
-      alertDiv.addEventListener('transitionend', () => {
-        alertDiv.remove();
-      });
+      toast.classList.remove('show');
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
     }, 5000);
   }
   

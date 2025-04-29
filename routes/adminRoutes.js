@@ -33,6 +33,21 @@ router.get('/players/all', adminAuthController.isAuthenticated, async (req, res)
     res.status(500).json({ error: 'Failed to fetch players' });
   }
 });
+router.get('/players/:id', adminAuthController.isAuthenticated, async (req, res) => {
+  try {
+    const playerId = parseInt(req.params.id);
+    const player = await playerModel.getPlayerById(playerId);
+    
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    
+    res.status(200).json({ player });
+  } catch (error) {
+    console.error('Error fetching player:', error);
+    res.status(500).json({ error: 'Failed to fetch player' });
+  }
+});
 router.post('/players', adminAuthController.isAuthenticated, adminController.createPlayer);
 router.put('/players/:id', adminAuthController.isAuthenticated, adminController.updatePlayer);
 router.delete('/players/:id', adminAuthController.isAuthenticated, adminController.deletePlayer);
@@ -138,6 +153,7 @@ router.get('/auction/results/latest', async (req, res) => {
 // Original routes (can be migrated later)
 router.post('/auction/next', adminAuthController.isAuthenticated, auctionController.skipToNextPlayer);
 router.post('/auction/player', adminAuthController.isAuthenticated, auctionController.startPlayerAuction);
+router.post('/auction/player/:id', adminAuthController.isAuthenticated, isAuctionAdmin, auctionController.startPlayerAuction);
 router.post('/auction/reset', adminAuthController.isAuthenticated, auctionController.resetAuction);
 
 module.exports = router;

@@ -6,6 +6,7 @@ let io = null;
 
 // Authentication middleware for socket connections
 const socketAuthMiddleware = require('../middleware/socketAuthMiddleware');
+const { timerManager } = require('../auction');
 
 // Initialize Socket.IO
 const init = (ioInstance) => {
@@ -97,7 +98,18 @@ const emitAuctionStatus = (statusObj) => {
     }
     
     if (io) {
+      // Emit with both event names for backward compatibility
       io.to('auction').emit('auction-status', normalizedStatus);
+      
+      // Also emit with the event name used in projector.ejs
+      if (normalizedStatus.currentPlayer) {
+        io.to('auction').emit('playerUpdate', {
+          player: normalizedStatus.currentPlayer,
+          highestBid: statusObj.highestBid || normalizedStatus.currentPlayer.basePrice,
+          highestBidder: statusObj.highestBidder || null,
+          timestamp: normalizedStatus.timestamp
+        });
+      }
       
       console.log('Emitted auction status:', {
         status: normalizedStatus.status,

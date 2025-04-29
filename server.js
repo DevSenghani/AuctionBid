@@ -78,6 +78,18 @@ app.get('/', (req, res) => {
   res.redirect('/home');  // Redirect root to the home page
 });
 
+// Projector view route
+app.get('/projector', (req, res) => {
+  try {
+    res.render('projector', {
+      title: 'Cricket Auction - Projector View'
+    });
+  } catch (error) {
+    console.error('Error loading projector view:', error);
+    res.status(500).send('Error loading projector view: ' + error.message);
+  }
+});
+
 // Set up the routes
 app.use('/home', require('./routes/homeRoutes'));
 app.use('/admin', require('./routes/adminRoutes'));

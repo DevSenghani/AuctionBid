@@ -108,6 +108,54 @@
       height: 1px;
       background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.1), transparent);
     }
+    
+    /* Toast notification styling */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+    }
+    
+    .toast {
+      min-width: 250px;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border: none;
+      border-radius: 8px;
+      opacity: 1;
+    }
+    
+    .toast-header {
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      padding: 0.5rem 0.75rem;
+    }
+    
+    .toast-body {
+      padding: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .toast-success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .toast-error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .toast-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+    
+    .toast-warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
   </style>
 </head>
 <body>
@@ -150,6 +198,9 @@
       </div>
     </div>
   </nav>
+
+  <!-- Toast container for notifications -->
+  <div class="toast-container"></div>
 
   <div class="container mt-4">
     <h1 class="mb-4"><i class="fas fa-users me-2"></i>Player Management</h1>
