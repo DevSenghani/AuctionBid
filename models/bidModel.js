@@ -7,14 +7,15 @@ exports.createBid = async (bidData) => {
     const player_id = bidData.player_id || bidData.player;
     const team_id = bidData.team_id || bidData.team;
     const amount = bidData.amount;
+    const bid_time = new Date();
     
     if (!player_id || !team_id || !amount) {
       throw new Error('Missing required fields: player_id, team_id, and amount are required');
     }
     
     const result = await db.query(
-      'INSERT INTO bids (player_id, team_id, amount) VALUES ($1, $2, $3) RETURNING *',
-      [player_id, team_id, amount]
+      'INSERT INTO bids (player_id, team_id, amount, bid_time) VALUES ($1, $2, $3, $4) RETURNING *',
+      [player_id, team_id, amount, bid_time]
     );
     return result.rows[0];
   } catch (error) {

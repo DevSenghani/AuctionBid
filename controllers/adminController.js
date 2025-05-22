@@ -19,6 +19,11 @@ exports.showAdminDashboard = async (req, res) => {
     try {
       teams = await teamModel.getAllTeams();
       console.log(`Retrieved ${teams.length} teams`);
+      
+      // Get players for each team
+      for (let team of teams) {
+        team.players = await teamModel.getTeamPlayers(team.id);
+      }
     } catch (teamError) {
       console.error('Error fetching teams:', teamError);
       teams = []; // Set to empty array to prevent template issues
@@ -61,11 +66,46 @@ exports.createTeam = async (req, res) => {
 // Create a new player
 exports.createPlayer = async (req, res) => {
   try {
-    const player = await playerModel.createPlayer(req.body);
-    res.status(201).json(player);
+    const { name, role, base_price, team_id, sold_amount } = req.body;
+    
+    // Validate required fields
+    if (!name || !role || !base_price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, role, and base price are required'
+      });
+    }
+
+    // Handle image upload
+    let image_url = null;
+    if (req.file) {
+      image_url = `/uploads/players/${req.file.filename}`;
+    }
+
+    const playerData = {
+      name,
+      role,
+      base_price: parseInt(base_price),
+      team_id: team_id || null,
+      sold_amount: sold_amount ? parseInt(sold_amount) : null,
+      image_url,
+      status: ['available']
+    };
+
+    const player = await playerModel.createPlayer(playerData);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Player added successfully',
+      player
+    });
   } catch (error) {
     console.error('Error creating player:', error);
-    res.status(500).json({ error: 'Failed to create player' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create player',
+      error: error.message
+    });
   }
 };
 

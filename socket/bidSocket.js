@@ -56,12 +56,19 @@ module.exports = (io) => {
           throw new Error('Required modules not available');
         }
 
-        const { player_id, amount } = data;
+        const { player_id, team_id, amount } = data;
         
         // Validate user has team information 
         if (!socket.user?.team_id) {
           return socket.emit('bid_error', { 
             message: 'You must be logged in as a team to place bids' 
+          });
+        }
+        
+        // Validate that the team_id matches the logged-in team
+        if (socket.user.team_id != team_id) {
+          return socket.emit('bid_error', { 
+            message: 'Invalid team ID' 
           });
         }
         
@@ -78,7 +85,7 @@ module.exports = (io) => {
         }
         
         // Get team and validate
-        const team = await teamModel.getTeamById(socket.user.team_id);
+        const team = await teamModel.getTeamById(team_id);
         if (!team) {
           return socket.emit('bid_error', { message: 'Team not found' });
         }
@@ -128,25 +135,25 @@ module.exports = (io) => {
           team_id: socket.user.team_id,
           team_name: socket.user.team_name,
           amount,
-          timestamp: new Date()
+          bid_time: new Date()
         };
         
         // Save bid to database
-        await bidModel.createBid(newBid);
+        const savedBid = await bidModel.createBid(newBid);
         
-        // Update the global auction state *** IMPORTANT ***
+        // Update the global auction state
         auctionState.highestBid = amount;
         auctionState.highestBidder = team;
         
         // Emit the bid to all clients in auction room
         bidNamespace.to('auction_room').emit('new-bid', {
-          ...newBid,
+          ...savedBid,
           player_name: player.name
         });
         
         // Also emit to main namespace for compatibility
         io.to('auction').emit('new-bid', {
-          ...newBid,
+          ...savedBid,
           player_name: player.name
         });
         
@@ -154,7 +161,8 @@ module.exports = (io) => {
         socket.emit('bid_placed', { 
           success: true, 
           message: 'Bid placed successfully. You are now the highest bidder.',
-          amount: amount
+          amount: amount,
+          bid_time: savedBid.bid_time
         });
         
         // Reset the bid timer if it's getting low (less than 15 seconds)

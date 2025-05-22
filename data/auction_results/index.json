@@ -190,5 +190,113 @@
     "teamsParticipated": [],
     "reason": "Auction completed",
     "createdAt": "2025-04-29T16:14:30.553Z"
+  },
+  {
+    "id": "1746118043862",
+    "endTime": "2025-05-01T16:47:23.857Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-01T16:47:23.862Z"
+  },
+  {
+    "id": "1746118624614",
+    "endTime": "2025-05-01T16:57:04.608Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-01T16:57:04.614Z"
+  },
+  {
+    "id": "1746118721897",
+    "endTime": "2025-05-01T16:58:41.882Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-01T16:58:41.897Z"
+  },
+  {
+    "id": "1746119388364",
+    "endTime": "2025-05-01T17:09:48.357Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-01T17:09:48.364Z"
+  },
+  {
+    "id": "1746887924528",
+    "endTime": "2025-05-10T14:38:44.522Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-10T14:38:44.528Z"
+  },
+  {
+    "id": "1746894131904",
+    "endTime": "2025-05-10T16:22:11.890Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-10T16:22:11.904Z"
+  },
+  {
+    "id": "1746894347396",
+    "endTime": "2025-05-10T16:25:47.390Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-10T16:25:47.396Z"
+  },
+  {
+    "id": "1747888400813",
+    "endTime": "2025-05-22T04:33:20.810Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-22T04:33:20.813Z"
+  },
+  {
+    "id": "1747898285955",
+    "endTime": "2025-05-22T07:18:05.951Z",
+    "endedBy": "admin",
+    "soldPlayers": [],
+    "unsoldPlayers": [],
+    "totalAmount": 0,
+    "totalPlayers": 0,
+    "teamsParticipated": [],
+    "reason": "Auction completed",
+    "createdAt": "2025-05-22T07:18:05.955Z"
   }
 ]

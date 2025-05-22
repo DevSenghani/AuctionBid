@@ -48,7 +48,11 @@ router.get('/players/:id', adminAuthController.isAuthenticated, async (req, res)
     res.status(500).json({ error: 'Failed to fetch player' });
   }
 });
-router.post('/players', adminAuthController.isAuthenticated, adminController.createPlayer);
+router.post('/players', 
+  adminAuthController.isAuthenticated, 
+  uploadPlayerImage.single('image'),
+  adminController.createPlayer
+);
 router.put('/players/:id', adminAuthController.isAuthenticated, adminController.updatePlayer);
 router.delete('/players/:id', adminAuthController.isAuthenticated, adminController.deletePlayer);
 

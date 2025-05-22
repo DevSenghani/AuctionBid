@@ -16,6 +16,8 @@
     .bid-card {
       transition: all 0.3s ease;
       box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      margin-bottom: 1rem;
+      width: 100%;
     }
     .bid-card:hover {
       transform: translateY(-5px);
@@ -24,6 +26,9 @@
     .player-details-card {
       border-radius: 10px;
       overflow: hidden;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
     .player-header {
       background: linear-gradient(135deg, #0d6efd, #0a58ca);
@@ -41,6 +46,17 @@
     .auction-controls {
       position: sticky;
       top: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+    }
+    /* Media query to ensure good layout on smaller screens */
+    @media (max-width: 767.98px) {
+      .auction-controls {
+        position: static;
+        margin-top: 1rem;
+      }
     }
     .badge-role {
       font-size: 0.8rem;
@@ -73,6 +89,78 @@
       0% { opacity: 1; }
       50% { opacity: 0.5; }
       100% { opacity: 1; }
+    }
+    /* Improved layout for team view */
+    .auction-layout {
+      display: flex !important; /* Force flex layout even when display is toggled */
+      flex-direction: row;
+      gap: 1.5rem;
+      position: relative;
+      width: 100%;
+    }
+    .player-column {
+      flex: 1;
+      min-width: 0; /* Allow shrinking below content size */
+    }
+    .bid-column {
+      width: 350px;
+      flex-shrink: 0; /* Prevent shrinking below specified width */
+    }
+    /* Adjust bid history sizing */
+    #bid-history {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    /* Ensure proper alignment on mobile */
+    @media (max-width: 991.98px) {
+      .auction-layout {
+        flex-direction: column;
+      }
+      .bid-column {
+        width: 100%;
+      }
+      .player-column, .bid-column {
+        margin-bottom: 1.5rem;
+      }
+    }
+    /* Fix the layout specifically for team view */
+    @media (min-width: 992px) {
+      .card-body#current-player {
+        padding-bottom: 0;
+      }
+      .player-details-card {
+        margin-bottom: 0;
+      }
+      .bid-history-container {
+        flex-grow: 1;
+        margin-top: 1rem;
+        display: flex;
+        flex-direction: column;
+      }
+      .bid-history-container .card-body {
+        flex-grow: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      #bid-history {
+        flex-grow: 1;
+        overflow-y: auto;
+      }
+    }
+    /* Enhance bid history items */
+    #bid-history .list-group-item {
+      padding: 0.75rem;
+      border-left: 3px solid transparent;
+      transition: background-color 0.2s, border-left-color 0.2s;
+    }
+    #bid-history .list-group-item:hover {
+      background-color: #f8f9fa;
+      border-left-color: #0d6efd;
+    }
+    #bid-history .list-group-item.highlight {
+      background-color: #e9f5ff;
+      border-left-color: #0d6efd;
     }
   </style>
 </head>
@@ -159,9 +247,9 @@
       </div>
     </div>
     
-    <div id="auction-container" class="row" style="display: none;">
-      <div class="col-md-8">
-        <div class="card mb-4 shadow-sm">
+    <div id="auction-container" class="auction-layout" style="display: none;">
+      <div class="player-column">
+        <div class="card mb-4 shadow-sm h-100">
           <div class="card-header bg-primary text-white">
             <h5 class="mb-0">Current Player on Auction</h5>
           </div>
@@ -231,9 +319,9 @@
         </div>
       </div>
       
-      <div class="col-md-4">
+      <div class="bid-column">
         <div class="auction-controls">
-          <div class="card bid-card mb-3 shadow-sm">
+          <div class="card bid-card shadow-sm">
             <div class="card-header bg-success text-white">
               <h5 class="mb-0">Place Bid</h5>
             </div>
@@ -280,12 +368,12 @@
             </div>
           </div>
           
-          <div class="card bid-card shadow-sm">
+          <div class="card bid-card shadow-sm bid-history-container">
             <div class="card-header bg-info text-white">
               <h5 class="mb-0"><i class="fas fa-history me-2"></i>Bid History</h5>
             </div>
-            <div class="card-body p-0">
-              <ul class="list-group list-group-flush" id="bid-history" style="max-height: 250px; overflow-y: auto;">
+            <div class="card-body p-0" style="min-height: 200px; overflow: hidden;">
+              <ul class="list-group list-group-flush" id="bid-history">
                 <li class="list-group-item text-center">No bids placed yet</li>
               </ul>
             </div>
@@ -353,11 +441,19 @@
         // bidSocket connection event
         bidSocket.on('connect', () => {
           console.log('Bid Socket connected: ' + bidSocket.id);
+          // Enable bid button if we have a team
+          if (placeBidBtn && teamId && teamId.value) {
+            placeBidBtn.disabled = false;
+          }
         });
         
         // Debug connection status
         bidSocket.on('connection_debug', (data) => {
           console.log('BidSocket connection debug:', data);
+          // Enable bid button if authenticated
+          if (placeBidBtn && data.authenticated) {
+            placeBidBtn.disabled = false;
+          }
         });
         
         // Socket disconnection event
@@ -409,7 +505,7 @@
               
               // Show auction container and hide waiting message
               if (waitingMessage) waitingMessage.style.display = 'none';
-              if (auctionContainer) auctionContainer.style.display = 'block';
+              if (auctionContainer) auctionContainer.style.display = 'flex';
             }
             
             // Update timer if provided
@@ -533,14 +629,23 @@
         });
       }
       
-      // Format currency function
-      const formatCurrency = (amount) => {
+      // Format currency for display (Indian Rupee format)
+      function formatCurrency(amount) {
+        // Handle undefined/null/NaN values
+        if (!amount || isNaN(amount)) {
+          return "₹0";
+        }
+        
+        // Convert to number if it's a string
+        const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+        
+        // Format with Indian numbering system (lakhs, crores)
         return new Intl.NumberFormat('en-IN', {
           style: 'currency',
           currency: 'INR',
           maximumFractionDigits: 0
-        }).format(amount);
-      };
+        }).format(num);
+      }
       
       // Show waiting countdown
       function showWaitingCountdown(seconds) {
@@ -637,55 +742,80 @@
         }, 5000);
       }
       
-      // Update bid info when new bid comes in
-      function updateBidInfo(bid) {
-        console.log('Updating bid info with:', bid);
-        
-        // Standardize field names (accept either format)
-        const amount = bid.amount;
-        const teamName = bid.team_name || bid.teamName;
-        
-        // Update highest bid
-        currentBid.textContent = formatCurrency(amount);
-        currentBidder.textContent = teamName;
-        currentBid.classList.add('text-success');
-        
-        // Set minimum bid amount to highest bid + increment
-        const nextBidAmount = parseInt(amount) + 10000;
-        if (bidAmount) {
-          bidAmount.min = nextBidAmount;
-          bidAmount.value = nextBidAmount;
-          minBid.textContent = formatCurrency(nextBidAmount);
+      // Calculate bid increment based on current bid amount
+      function calculateBidIncrement(currentBid) {
+        // Standard bid increments based on current bid
+        if (currentBid < 100000) return 10000;       // +10k for bids under 100k
+        else if (currentBid < 500000) return 20000;  // +20k for bids 100k to 500k
+        else if (currentBid < 1000000) return 50000; // +50k for bids 500k to 1M
+        else return 100000;                         // +100k for bids over 1M
+      }
+      
+      // Function to update bid information
+      function updateBidInfo(bidData) {
+        try {
+          // Extract bid details
+          const bidAmount = bidData.amount || bidData.bid_amount;
+          const bidTeam = bidData.team_name || bidData.teamName || 'Unknown Team';
+          const bidTeamId = bidData.team_id || bidData.teamId;
+          
+          // Update current bid and bidder
+          if (currentBid) currentBid.textContent = formatCurrency(bidAmount);
+          if (currentBidder) currentBidder.textContent = bidTeam;
+          
+          // Update min bid for next bid
+          if (minBid) {
+            const incrementAmount = calculateBidIncrement(bidAmount);
+            const nextMinBid = bidAmount + incrementAmount;
+            minBid.textContent = formatCurrency(nextMinBid);
+            
+            // Update the bid amount input value
+            if (bidAmount) {
+              bidAmount.min = nextMinBid;
+              bidAmount.value = nextMinBid;
+            }
+          }
+          
+          // Enable bid button for team members
+          if (placeBidBtn && bidAmount) {
+            placeBidBtn.disabled = false;
+          }
+          
+          // Update bid history
+          if (bidHistory) {
+            const bidItem = document.createElement('li');
+            bidItem.className = 'list-group-item';
+            
+            // Highlight if this is current team's bid
+            const currentTeamId = teamId ? teamId.value : null;
+            if (currentTeamId && bidTeamId == currentTeamId) { // Use loose equality for both string and object IDs
+              bidItem.classList.add('highlight');
+            }
+            
+            // Format timestamp
+            const timestamp = new Date(bidData.timestamp || Date.now());
+            const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            bidItem.innerHTML = `
+              <div class="d-flex justify-content-between align-items-center">
+                <span><strong>${bidTeam}</strong></span>
+                <span class="badge bg-primary">${formatCurrency(bidAmount)}</span>
+              </div>
+              <small class="text-muted">${timeString}</small>
+            `;
+            
+            // Clear "no bids" message if it exists
+            if (bidHistory.children.length === 1 && 
+                bidHistory.children[0].textContent.trim() === 'No bids placed yet') {
+              bidHistory.innerHTML = '';
+            }
+            
+            // Add to beginning of list
+            bidHistory.insertBefore(bidItem, bidHistory.firstChild);
+          }
+        } catch (error) {
+          console.error('Error updating bid info:', error);
         }
-        
-        // Update bid history
-        const playerId = bid.player_id || bid.playerId;
-        if (playerId) {
-          loadBidHistory(playerId);
-        }
-        
-        // Show a toast notification
-        const toastContainer = document.createElement('div');
-        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-        toastContainer.style.zIndex = '5';
-        toastContainer.innerHTML = `
-          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header bg-primary text-white">
-              <strong class="me-auto">New Bid</strong>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-            <div class="toast-body">
-              <strong>${teamName}</strong> placed a bid of ${formatCurrency(amount)}
-            </div>
-          </div>
-        `;
-        
-        document.body.appendChild(toastContainer);
-        
-        // Remove toast after 3 seconds
-        setTimeout(() => {
-          toastContainer.remove();
-        }, 3000);
       }
       
       // Timer function
@@ -956,6 +1086,10 @@
           currentPlayerId.value = playerId;
         }
         
+        // Make sure auction container is visible with the correct layout
+        waitingMessage.style.display = 'none';
+        auctionContainer.style.display = 'flex';
+        
         // Show loading state
         playerName.textContent = 'Loading player...';
         playerRole.textContent = '-';
@@ -1110,8 +1244,9 @@
           
           const amount = parseInt(bidAmount.value);
           const playerId = currentPlayerId.value;
+          const teamId = document.getElementById('team-id').value;
           
-          if (!amount || !playerId) {
+          if (!amount || !playerId || !teamId) {
             alert('Please wait for a player to be on auction and enter a valid bid amount.');
             return;
           }
@@ -1122,70 +1257,18 @@
           
           // Send bid using bidSocket
           if (bidSocket && bidSocket.connected) {
+            console.log('Sending bid via socket:', { player_id: playerId, team_id: teamId, amount: amount });
             bidSocket.emit('place_bid', {
               player_id: playerId,
+              team_id: teamId,
               amount: amount
             });
-            
-            // Reset button state after a short delay (actual reset will happen in bid_placed event)
-            setTimeout(() => {
-              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
-              placeBidBtn.disabled = false;
-            }, 1000);
           } else {
-            // Fallback to HTTP API if socket not connected
-            fetch('/auction/bid', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                player_id: playerId,
-                team_id: teamId.value,
-                amount: amount
-              })
-            })
-            .then(response => {
-              if (!response.ok) {
-                return response.json().then(err => { throw new Error(err.error) });
-              }
-              return response.json();
-            })
-            .then(data => {
-              // Show success toast
-              const toastContainer = document.createElement('div');
-              toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-              toastContainer.style.zIndex = '5';
-              toastContainer.innerHTML = `
-                <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-                  <div class="toast-header bg-success text-white">
-                    <strong class="me-auto">Success</strong>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                  </div>
-                  <div class="toast-body">
-                    ${data.message || 'Bid placed successfully!'}
-                  </div>
-                </div>
-              `;
-              document.body.appendChild(toastContainer);
-              
-              // Remove toast after 3 seconds
-              setTimeout(() => {
-                toastContainer.remove();
-              }, 3000);
-              
-              // Reset button state
-              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
-              placeBidBtn.disabled = false;
-            })
-            .catch(error => {
-              // Reset button state
-              placeBidBtn.disabled = false;
-              placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
-              
-              // Show error alert
-              alert('Error placing bid: ' + error.message);
-            });
+            console.error('Bid socket not connected');
+            alert('Unable to place bid. Please refresh the page and try again.');
+            placeBidBtn.disabled = false;
+            placeBidBtn.innerHTML = '<i class="fas fa-gavel me-2"></i>Place Bid';
+            return;
           }
         });
       }
@@ -1213,6 +1296,34 @@
       
       // Initialize Socket.IO
       initializeSocket();
+      
+      // Ensure layout is correct on page load
+      function ensureCorrectLayout() {
+        // If auction container should be visible, make sure it's using flex display
+        if (auctionContainer) {
+          if (auctionContainer.style.display !== 'none') {
+            auctionContainer.style.display = 'flex';
+            
+            // Also check if bid column is correctly positioned on larger screens
+            if (window.innerWidth >= 992) {
+              const bidColumn = document.querySelector('.bid-column');
+              if (bidColumn) {
+                bidColumn.style.width = '350px';
+              }
+            } else {
+              // Reset width on mobile
+              const bidColumn = document.querySelector('.bid-column');
+              if (bidColumn) {
+                bidColumn.style.width = '100%';
+              }
+            }
+          }
+        }
+      }
+      
+      // Call initially and add window resize listener
+      ensureCorrectLayout();
+      window.addEventListener('resize', ensureCorrectLayout);
       
       // Initial auction status check
       fetch('/auction/status')

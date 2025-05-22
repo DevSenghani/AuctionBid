@@ -158,3 +158,21 @@ exports.updateTeamPassword = async (teamId, password) => {
     throw error;
   }
 };
+
+// Get team players with details
+exports.getTeamPlayers = async (teamId) => {
+  try {
+    const result = await db.query(
+      'SELECT p.*, t.name as team_name ' +
+      'FROM players p ' +
+      'JOIN teams t ON p.team_id = t.id ' +
+      'WHERE p.team_id = $1 ' +
+      'ORDER BY p.sold_price DESC',
+      [teamId]
+    );
+    return result.rows;
+  } catch (error) {
+    console.error('Error getting team players:', error);
+    return [];
+  }
+};

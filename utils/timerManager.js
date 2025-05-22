@@ -1,6 +1,8 @@
 // utils/timerManager.js
 
-const { emitTimerUpdate, emitWaitingCountdown } = require('../socket/auctionSocket');
+// Instead of importing at the top where it can cause circular dependencies,
+// we'll get these functions when needed
+// const { emitTimerUpdate, emitWaitingCountdown } = require('../socket/auctionSocket');
 const config = require('../config/auctionConfig');
 
 /**
@@ -48,14 +50,17 @@ class TimerManager {
    */
   emitTimerUpdates() {
     try {
+      // Get socket functions dynamically to prevent circular dependencies
+      const socketModule = require('../socket/auctionSocket');
+      
       if (this.bidTimer) {
-        emitTimerUpdate(this.timeRemaining, false);
+        socketModule.emitTimerUpdate(this.timeRemaining, false);
       } else if (this.waitingTimer) {
-        emitWaitingCountdown(this.waitingTimeRemaining, false);
+        socketModule.emitWaitingCountdown(this.waitingTimeRemaining, false);
       } else if (this.pausedBidTimeRemaining !== null) {
-        emitTimerUpdate(this.pausedBidTimeRemaining, true);
+        socketModule.emitTimerUpdate(this.pausedBidTimeRemaining, true);
       } else if (this.pausedWaitingTimeRemaining !== null) {
-        emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
+        socketModule.emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
       }
     } catch (error) {
       console.error('Error emitting timer updates:', error);
@@ -80,9 +85,15 @@ class TimerManager {
       this.timeRemaining = this.bidTimerDuration;
       this.bidStartTime = Date.now();
       
+      // Get the socket module
+      const socketModule = require('../socket/auctionSocket');
+      
       // Start the timer
       this.bidTimer = setInterval(() => {
         this.timeRemaining--;
+        
+        // Emit timer update to clients
+        socketModule.emitTimerUpdate(this.timeRemaining, false);
         
         // When timer reaches 0
         if (this.timeRemaining <= 0) {
@@ -114,22 +125,28 @@ class TimerManager {
    * @returns {number} Time remaining when paused
    */
   pauseBidTimer() {
-    if (this.bidTimer) {
-      clearInterval(this.bidTimer);
-      this.bidTimer = null;
-      
-      // Calculate exact time remaining
-      const elapsed = Math.floor((Date.now() - this.bidStartTime) / 1000);
-      this.pausedBidTimeRemaining = Math.max(0, this.bidTimerDuration - elapsed);
-      
-      // Emit pause status to clients
-      emitTimerUpdate(this.pausedBidTimeRemaining, true);
-      
-      this.bidStartTime = null;
-      console.log(`Bid timer paused with ${this.pausedBidTimeRemaining} seconds remaining`);
-      return this.pausedBidTimeRemaining;
+    try {
+      if (this.bidTimer) {
+        clearInterval(this.bidTimer);
+        this.bidTimer = null;
+        
+        // Calculate exact time remaining
+        const elapsed = Math.floor((Date.now() - this.bidStartTime) / 1000);
+        this.pausedBidTimeRemaining = Math.max(0, this.bidTimerDuration - elapsed);
+        
+        // Emit pause status to clients
+        const socketModule = require('../socket/auctionSocket');
+        socketModule.emitTimerUpdate(this.pausedBidTimeRemaining, true);
+        
+        this.bidStartTime = null;
+        console.log(`Bid timer paused with ${this.pausedBidTimeRemaining} seconds remaining`);
+        return this.pausedBidTimeRemaining;
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error pausing bid timer:', error);
+      return 0;
     }
-    return 0;
   }
 
   /**
@@ -164,9 +181,15 @@ class TimerManager {
       this.waitingTimeRemaining = this.waitingTimerDuration;
       this.waitingStartTime = Date.now();
       
+      // Get the socket module
+      const socketModule = require('../socket/auctionSocket');
+      
       // Start the timer
       this.waitingTimer = setInterval(() => {
         this.waitingTimeRemaining--;
+        
+        // Emit timer update to clients
+        socketModule.emitWaitingCountdown(this.waitingTimeRemaining, false);
         
         // When timer reaches 0
         if (this.waitingTimeRemaining <= 0) {
@@ -194,22 +217,27 @@ class TimerManager {
   }
 
   pauseWaitingTimer() {
-    if (this.waitingTimer) {
-      clearInterval(this.waitingTimer);
-      this.waitingTimer = null;
-      
-      // Calculate exact time remaining
-      const elapsed = Math.floor((Date.now() - this.waitingStartTime) / 1000);
-      this.pausedWaitingTimeRemaining = Math.max(0, this.waitingTimerDuration - elapsed);
-      
-      // Emit pause status to clients with timestamp
-      const { emitWaitingCountdown } = require('../socket/auctionSocket');
-      emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
-      
-      this.waitingStartTime = null;
-      return this.pausedWaitingTimeRemaining;
+    try {
+      if (this.waitingTimer) {
+        clearInterval(this.waitingTimer);
+        this.waitingTimer = null;
+        
+        // Calculate exact time remaining
+        const elapsed = Math.floor((Date.now() - this.waitingStartTime) / 1000);
+        this.pausedWaitingTimeRemaining = Math.max(0, this.waitingTimerDuration - elapsed);
+        
+        // Emit pause status to clients with timestamp
+        const socketModule = require('../socket/auctionSocket');
+        socketModule.emitWaitingCountdown(this.pausedWaitingTimeRemaining, true);
+        
+        this.waitingStartTime = null;
+        return this.pausedWaitingTimeRemaining;
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error pausing waiting timer:', error);
+      return 0;
     }
-    return 0;
   }
 
   stopWaitingTimer() {
@@ -311,24 +339,29 @@ class TimerManager {
       // Clear the paused value
       this.pausedBidTimeRemaining = null;
       
+      // Get the socket module
+      const socketModule = require('../socket/auctionSocket');
+      
       // Start the timer
       this.bidTimer = setInterval(() => {
         this.timeRemaining--;
         
         // Emit remaining time to all clients
-        const io = require('../socket/auctionSocket').getIO();
-        if (io) {
-          io.to('auction').emit('bid-time-update', {
-            timeRemaining: this.timeRemaining,
-            timestamp: Date.now()
-          });
-        }
+        socketModule.emitTimerUpdate(this.timeRemaining, false);
         
         // When timer reaches 0
         if (this.timeRemaining <= 0) {
+          // Save the callback before stopping the timer
+          const savedCallback = callback;
           this.stopBidTimer();
-          if (callback) {
-            callback();
+          
+          // Execute the callback if it exists
+          if (savedCallback) {
+            try {
+              savedCallback();
+            } catch (callbackError) {
+              console.error('Error in bid timer callback:', callbackError);
+            }
           }
         }
       }, 1000);
@@ -359,24 +392,29 @@ class TimerManager {
       // Clear the paused value
       this.pausedWaitingTimeRemaining = null;
       
+      // Get the socket module
+      const socketModule = require('../socket/auctionSocket');
+      
       // Start the timer
       this.waitingTimer = setInterval(() => {
         this.waitingTimeRemaining--;
         
         // Emit remaining time to all clients
-        const io = require('../socket/auctionSocket').getIO();
-        if (io) {
-          io.to('auction').emit('waiting-time-update', {
-            timeRemaining: this.waitingTimeRemaining,
-            timestamp: Date.now()
-          });
-        }
+        socketModule.emitWaitingCountdown(this.waitingTimeRemaining, false);
         
         // When timer reaches 0
         if (this.waitingTimeRemaining <= 0) {
+          // Save the callback before stopping the timer
+          const savedCallback = callback;
           this.stopWaitingTimer();
-          if (callback) {
-            callback();
+          
+          // Execute the callback if it exists
+          if (savedCallback) {
+            try {
+              savedCallback();
+            } catch (callbackError) {
+              console.error('Error in waiting timer callback:', callbackError);
+            }
           }
         }
       }, 1000);
@@ -397,19 +435,20 @@ class TimerManager {
       // Get the pause state
       const pauseState = this.getPauseState();
       
+      // Get the socket module
+      const socketModule = require('../socket/auctionSocket');
+      
       // Emit current player information first
       if (this.auctionState.currentPlayer) {
-        const { emitPlayerUpdate, emitAuctionStatus } = require('../socket/auctionSocket');
-        
         // Emit player update
-        emitPlayerUpdate({
+        socketModule.emitPlayerUpdate({
           player: this.auctionState.currentPlayer,
           highestBid: this.auctionState.highestBid,
           highestBidder: this.auctionState.highestBidder
         });
         
         // Emit auction status
-        emitAuctionStatus({
+        socketModule.emitAuctionStatus({
           isRunning: true,
           isPaused: false,
           isWaiting: false,

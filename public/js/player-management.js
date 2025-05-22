@@ -39,51 +39,51 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Player form submission
   if (playerForm) {
-    playerForm.addEventListener('submit', function(e) {
+    playerForm.addEventListener('submit', async function(e) {
       e.preventDefault();
       
-      const playerData = {
-        name: playerNameInput.value,
-        role: playerRoleInput.value,
-        base_price: parseInt(playerBasePriceInput.value),
-        image_url: playerImageUrlInput.value || null
-      };
+      const formData = new FormData();
+      formData.append('name', playerNameInput.value);
+      formData.append('role', playerRoleInput.value);
+      formData.append('base_price', playerBasePriceInput.value);
+      
+      // Handle image upload
+      const imageFile = document.getElementById('player-image-upload').files[0];
+      if (imageFile) {
+        formData.append('image', imageFile);
+      }
       
       // If team is selected, include team_id and sold_amount
       if (playerTeamInput.value) {
-        playerData.team_id = playerTeamInput.value;
-        playerData.sold_amount = parseInt(playerSoldPriceInput.value) || playerData.base_price;
+        formData.append('team_id', playerTeamInput.value);
+        formData.append('sold_amount', playerSoldPriceInput.value || playerBasePriceInput.value);
       }
       
-      // Send request to create player
-      fetch('/admin/players', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(playerData)
-      })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().then(err => { throw new Error(err.error || 'Failed to create player') });
+      try {
+        const response = await fetch('/admin/players', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Reset form
+          playerForm.reset();
+          playerSoldPriceContainer.style.display = 'none';
+          
+          // Refresh player list
+          loadPlayers();
+          
+          // Show success message
+          showAlert('Player added successfully!', 'success');
+        } else {
+          throw new Error(result.message || 'Failed to create player');
         }
-        return response.json();
-      })
-      .then(data => {
-        // Reset form
-        playerForm.reset();
-        playerSoldPriceContainer.style.display = 'none';
-        
-        // Refresh player list
-        loadPlayers();
-        
-        // Show success message
-        showAlert('Player added successfully!', 'success');
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error creating player:', error);
         showAlert('Error: ' + error.message, 'danger');
-      });
+      }
     });
   }
   
